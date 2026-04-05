@@ -1,0 +1,99 @@
+
+
+:root {
+  --active: #39ff14;   /* Matrix Green */
+  --inactive: #7289da; /* Blurple */
+  --bg: #0a0a0a;
+  --sidebar: #1a1a1a;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: white;
+  font-family: 'Courier New', Courier, monospace;
+  overflow: hidden; /* Stops the window from scrolling */
+}
+
+/* THE GRID SYSTEM */
+.ui-wrapper {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* COLUMN 1: SERVERS */
+.sidebar-servers {
+  width: 85px;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+  border-right: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.btn-container { margin-bottom: 15px; cursor: pointer; }
+.ascii-btn { 
+  color: var(--inactive); 
+  line-height: 1.1; 
+  font-size: 11px; 
+  margin: 0; 
+  white-space: pre; /* CRITICAL: This keeps the ASCII shape */
+}
+.is-pushed { 
+  color: var(--active); 
+  text-shadow: 0 0 8px var(--active); 
+}
+
+/* COLUMN 2: CHANNELS */
+.sidebar-channels {
+  width: 200px;
+  background: var(--sidebar);
+  padding: 20px 15px;
+  border-right: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.server-title { font-size: 14px; color: var(--active); margin-bottom: 25px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+.channel-item { padding: 10px; color: #888; cursor: pointer; font-size: 13px; }
+.channel-item:hover { background: #222; color: #fff; }
+.active-chan { color: #fff; background: #333; border-radius: 4px; }
+.channel-item::before { content: "# "; }
+
+/* COLUMN 3: CHAT AREA */
+.chat-area { 
+  flex-grow: 1; 
+  display: flex; 
+  flex-direction: column; 
+  padding: 20px; 
+  background: var(--bg);
+}
+
+.chat-header { color: #444; margin-bottom: 20px; font-size: 12px; letter-spacing: 2px; }
+.message-log { flex-grow: 1; overflow-y: auto; margin-bottom: 20px; }
+.msg { margin-bottom: 10px; line-height: 1.4; }
+.msg-prefix { color: var(--inactive); font-weight: bold; }
+.msg-text { color: #eee; }
+.system-msg { color: #555; font-style: italic; margin-bottom: 20px; border-left: 2px solid #333; padding-left: 10px; }
+
+/* INPUT BOX */
+.input-row { 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+  border-top: 1px solid #333; 
+  padding-top: 20px; 
+}
+.prompt { color: var(--active); font-weight: bold; }
+input { 
+  background: transparent; 
+  border: none; 
+  color: var(--active); 
+  outline: none; 
+  width: 100%; 
+  font-family: inherit; 
+  font-size: 16px; 
+}
