@@ -52,11 +52,11 @@ export default function App() {
 
   // --- FETCH MODELS ---
   useEffect(() => {
-    if (!activeProvider) return;
+    if (!activeProvider || !keys[activeProvider]) return;
     const fetchModels = async () => {
       try {
         let url = activeProvider === 'openrouter' ? 'https://openrouter.ai/api/v1/models' : 'https://api.openai.com/v1/models';
-        let headers = activeProvider === 'openai' ? { 'Authorization': `Bearer ${keys.openai}` } : {};
+        let headers = { 'Authorization': `Bearer ${keys[activeProvider]}` };
         const res = await fetch(url, { headers });
         const data = await res.json();
         if (data.data) {
@@ -70,7 +70,7 @@ export default function App() {
       } catch (e) { console.error("UPLINK ERROR", e); }
     };
     fetchModels();
-  }, [activeProvider, keys.openai]);
+  }, [activeProvider, keys]);
 
   const getActiveModelName = () => {
     const found = modelList.find(m => m.id === modelID);
@@ -84,6 +84,7 @@ export default function App() {
     const currentInput = input;
     setInput('');
 
+    // --- PROVIDER SETUP ---
     if (chan === 'providers') {
       if (!activeProvider) return;
       setKeys(prev => ({ ...prev, [activeProvider]: currentInput.trim() }));
@@ -92,6 +93,7 @@ export default function App() {
       return;
     }
 
+    // --- CHAT LOGIC ---
     setMessages(prev => [...prev, { role: 'USER', text: currentInput }]);
     const currentKey = keys[activeProvider];
     
@@ -100,7 +102,6 @@ export default function App() {
       return;
     }
 
-    // 1. Setup the AI message placeholder
     const aiMessageId = Date.now();
     setMessages(prev => [...prev, { role: 'AI', text: '...', id: aiMessageId }]);
     
@@ -108,6 +109,15 @@ export default function App() {
       const url = activeProvider === 'openrouter' 
         ? 'https://openrouter.ai/api/v1/chat/completions' 
         : 'https://api.openai.com/v1/chat/completions';
+
+      // Map internal messages to AI-compatible format (Context History)
+      const apiMessages = [
+        ...messages.filter(m => m.role !== 'SYS').map(m => ({
+          role: m.role === 'USER' ? 'user' : 'assistant',
+          content: m.text
+        })),
+        { role: 'user', content: currentInput }
+      ];
 
       const response = await fetch(url, {
         method: 'POST',
@@ -117,23 +127,22 @@ export default function App() {
         },
         body: JSON.stringify({ 
           model: modelID, 
-          messages: [{ role: 'user', content: currentInput }],
+          messages: apiMessages,
           stream: true 
         })
       });
 
-      const reader = response.body.getReader();
+     const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
 
       while (true) {
-        console.log("CHUNK RECEIVED:", chunk);
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
         
-        // Split by 'data: ' and filter out empty strings/non-json
+        // Split by lines because one chunk can contain multiple "data:" blocks
         const lines = chunk.split('\n');
         
         for (const line of lines) {
@@ -142,18 +151,22 @@ export default function App() {
           if (!cleanedLine || cleanedLine === "[DONE]") continue;
 
           try {
+            // Some providers wrap the JSON in extra brackets or quotes
             const parsed = JSON.parse(cleanedLine);
             const content = parsed.choices[0]?.delta?.content || "";
+            
             if (content) {
               fullText += content;
-              // Update state immediately as content arrives
+              // We use a functional update (prev => ...) to ensure React 
+              // doesn't miss any fast-moving characters
               setMessages(prev => prev.map(m => 
                 m.id === aiMessageId ? { ...m, text: fullText } : m
               ));
             }
           } catch (e) {
-            // This handles cases where the JSON is split across chunks
-            console.log("Partial chunk received...");
+            // This is likely a partial JSON fragment. 
+            // In a terminal, we can just skip it or wait for the next chunk.
+            continue; 
           }
         }
       }
@@ -191,7 +204,7 @@ export default function App() {
                 className={`channel-item ${activeProvider === p ? 'active-chan' : ''}`} 
                 onClick={() => {
                   setActiveProvider(p);
-                  localStorage.setItem('active_provider', p); // Save to disk
+                  localStorage.setItem('active_provider', p);
                 }}>
                 # # # # {p}
               </div>
@@ -231,7 +244,7 @@ export default function App() {
           </div>
           {messages.map((m, i) => (
             <div key={i} className="msg">
-              <span className="msg-prefix" style={{ color: m.role === 'AI' ? '#00ff00' : '#444', fontWeight: 'bold' }}>{m.role}: </span>
+              <span className="msg-prefix" style={{ color: m.role === 'AI' ? '#00ff00' : '#444', fontWeight: 'bold' }}>{m.role === 'SYS' ? '>>>' : m.role}: </span>
               <span className="msg-text">{m.text}</span>
             </div>
           ))}

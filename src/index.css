@@ -76,7 +76,10 @@ body {
 .message-log { flex-grow: 1; overflow-y: auto; margin-bottom: 20px; }
 .msg { margin-bottom: 10px; line-height: 1.4; }
 .msg-prefix { color: var(--inactive); font-weight: bold; }
-.msg-text { color: #eee; }
+.msg-text {
+  white-space: pre-wrap; /* This keeps the AI's line breaks and spacing intact */
+  word-wrap: break-word;
+}
 .system-msg { color: #555; font-style: italic; margin-bottom: 20px; border-left: 2px solid #333; padding-left: 10px; }
 
 /* INPUT BOX */
