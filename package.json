@@ -1,14 +1,16 @@
 {
   "name": "my-ascii-chat",
+  "homepage": "https://loteknowledge.github.io/my-ascii-chat",
   "version": "1.0.0",
   "description": "",
   "main": "main.cjs",
-"scripts": {
-  "dev": "vp dev",
-  "build": "vp build",
-  "electron:dev": "NODE_ENV=development electron .",
-  "electron:build": "vp build && electron ."
-},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -20,6 +22,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
     "electron": "^41.1.1",
+    "gh-pages": "^6.3.0",
     "vite-plus": "^0.1.15"
   }
 }
