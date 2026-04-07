@@ -1,7 +1,7 @@
 {
-  "name": "WEYLAND-YUTANI CORP: OPERATIONAL UPLINK",
-  "short_name": "W-Y_OPS",
-  "description": "Proprietary Interface for MU/TH/UR 6000 Mainframe Systems.",
+  "name": "Cognosys",
+  "short_name": "Cognosys",
+  "description": "Cognosys interface for MU/TH/UR 6000 memory and control.",
   "icons": [
     {
       "src": "favicon.ico",
