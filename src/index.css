@@ -95,16 +95,25 @@ body::before {
 }
 
 .btn-container { margin-bottom: 15px; cursor: pointer; }
-.ascii-btn { 
-  color: var(--inactive); 
-  line-height: 1.1; 
-  font-size: 11px; 
-  margin: 0; 
+.btn-container:hover .ascii-btn {
+  transform: translate(1px, 1px) scale(1.02);
+  color: #9aa7ff;
+  text-shadow: 0 0 10px rgba(114, 137, 218, 0.35);
+}
+.ascii-btn {
+  color: var(--inactive);
+  line-height: 1.05;
+  font-size: 11px;
+  margin: 0;
   white-space: pre; /* CRITICAL: This keeps the ASCII shape */
+  transition: transform 90ms ease, color 90ms ease, text-shadow 90ms ease, opacity 90ms ease;
+  opacity: 0.82;
 }
 .is-pushed { 
   color: var(--active); 
-  text-shadow: 0 0 8px var(--active); 
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.55);
+  opacity: 1;
+  transform: translate(3px, 3px);
 }
 
 /* COLUMN 2: CHANNELS */

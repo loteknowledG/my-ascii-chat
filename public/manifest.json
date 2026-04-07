@@ -1,7 +1,7 @@
 {
-  "name": "Cognosys",
-  "short_name": "Cognosys",
-  "description": "Cognosys interface for MU/TH/UR 6000 memory and control.",
+  "name": "Wayland-Yutani Cyberdec",
+  "short_name": "Cyberdec",
+  "description": "Wayland-Yutani Cyberdec interface for MU/TH/UR 6000 memory and control.",
   "icons": [
     {
       "src": "favicon.ico",

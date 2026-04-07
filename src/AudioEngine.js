@@ -76,3 +76,31 @@ export const playLock = () => {
   osc1.stop(ctx.currentTime + 0.2);
   osc2.stop(ctx.currentTime + 0.2);
 };
+
+export const playSnapLock = () => {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const now = ctx.currentTime;
+
+  const thud = ctx.createOscillator();
+  const thudGain = ctx.createGain();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(220, now);
+  thud.frequency.exponentialRampToValueAtTime(70, now + 0.08);
+  thudGain.gain.setValueAtTime(0.12, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.01, now + 0.11);
+
+  const latch = ctx.createOscillator();
+  const latchGain = ctx.createGain();
+  latch.type = 'square';
+  latch.frequency.setValueAtTime(1200, now);
+  latchGain.gain.setValueAtTime(0.03, now);
+  latchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+
+  thud.connect(thudGain).connect(ctx.destination);
+  latch.connect(latchGain).connect(ctx.destination);
+
+  thud.start();
+  latch.start();
+  thud.stop(now + 0.11);
+  latch.stop(now + 0.04);
+};
