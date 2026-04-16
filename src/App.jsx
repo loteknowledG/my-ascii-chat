@@ -1800,289 +1800,47 @@ export default function App() {
         </aside>
 
         {/* COL 3: TERMINAL */}
-        <main
-          className="flex flex-col flex-1 min-w-0 bg-black"
-          onClick={() => {
+        <TerminalColumn
+          headerText={`${activeProvider.toUpperCase()} // ${secondColumnSelectionLabel} // ${
+            modelID || "NO_MODEL"
+          }`}
+          headerClassName={
+            isActivelyProbing || isRetrievingModels ? "model-probe-wave" : ""
+          }
+          headerTint={providerTint}
+          headerGlow={providerTintGlow}
+          onMainClick={() => {
             if (isDrawerMode && drawerProgress > 0.5) {
               setDrawerProgress(0);
             }
           }}
-        >
-          <header className="flex items-center h-16 px-6 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md">
-            <div
-              className={
-                isActivelyProbing || isRetrievingModels
-                  ? "model-probe-wave"
-                  : ""
-              }
-              style={{
-                color: providerTint,
-                textShadow: providerTintGlow,
-                fontSize: "10px",
-              }}
-            >
-              {activeProvider.toUpperCase()} // {secondColumnSelectionLabel} //{" "}
-              {modelID || "NO_MODEL"}
-            </div>
-          </header>
-
-          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col pt-6">
-            {server === "m" && chan === "intel" && memoryPanels}
-
-            <div
-              ref={messageLogRef}
-              className="message-log"
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: "auto",
-                marginBottom: "20px",
-              }}
-            >
-              {(channelData[chan] || []).map((m, i) => (
-                <div key={i} style={{ marginBottom: "15px" }}>
-                  <span
-                    style={{
-                      color:
-                        m.role === "AI"
-                          ? "#00ff00"
-                          : m.role === "SYS"
-                            ? "#ffaa00"
-                            : "#444",
-                    }}
-                  >
-                    [{m.role}]
-                  </span>{" "}
-                  {typeof m.text === "string" &&
-                  (m.text.includes("Open AI console") ||
-                    m.text.includes("OpenRouter console")) ? (
-                    <span>
-                      {m.text
-                        .split(/(Open AI console|OpenRouter console)/g)
-                        .map((part, idx) => {
-                          if (part === "Open AI console") {
-                            return (
-                              <a
-                                key={idx}
-                                href="https://platform.openai.com/settings/api-keys"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: "#78b8ff",
-                                  textDecoration: "underline",
-                                }}
-                              >
-                                {part}
-                              </a>
-                            );
-                          }
-                          if (part === "OpenRouter console") {
-                            return (
-                              <a
-                                key={idx}
-                                href="https://openrouter.ai/workspaces/default/keys"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: "#78b8ff",
-                                  textDecoration: "underline",
-                                }}
-                              >
-                                {part}
-                              </a>
-                            );
-                          }
-                          return part;
-                        })}
-                    </span>
-                  ) : (
-                    m.text
-                  )}
-                </div>
-              ))}
-
-              <div ref={chatEndRef} />
-            </div>
-          </div>
-
-          <footer className="p-4 bg-gray-900/80 border-t border-gray-800">
-            <div className="relative flex items-center">
-              <span className="absolute left-4 text-green-500 font-bold text-lg">
-                $
-              </span>
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  playSystemSound("click", 0.04);
-                }}
-                onKeyDown={handleSend}
-                placeholder={
-                  chan === "providers"
-                    ? "ENTER GATEWAY KEY..."
-                    : "Enter command or message..."
-                }
-                className="w-full bg-black border border-gray-700 rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-green-500 text-green-400 placeholder-gray-700 transition-all font-mono text-sm"
-              />
-            </div>
-          </footer>
-        </main>
+          memoryPanels={server === "m" && chan === "intel" ? memoryPanels : null}
+          messages={channelData[chan] || []}
+          messageLogRef={messageLogRef}
+          chatEndRef={chatEndRef}
+          inputRef={inputRef}
+          inputValue={input}
+          onInputChange={(e) => {
+            setInput(e.target.value);
+            playSystemSound("click", 0.04);
+          }}
+          onInputKeyDown={handleSend}
+          inputPlaceholder={
+            chan === "providers"
+              ? "ENTER GATEWAY KEY..."
+              : "Enter command or message..."
+          }
+        />
       </div>
 
-      {memoryFullscreenCard &&
-        ((server === "m" && chan === "intel") ||
-          (server === "b" && chan === "samus-manus")) && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 80,
-              background: "rgba(0, 0, 0, 0.92)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "8px",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setMemoryFullscreenCard(null);
-            }}
-          >
-            <div
-              style={{
-                width: "min(1400px, 100%)",
-                height: "calc(100% - 8px)",
-                maxHeight: "calc(100% - 8px)",
-                overflow: "hidden",
-                border: "1px solid #1f1f1f",
-                borderRadius: "8px",
-                background: "#050505",
-                padding: "10px",
-                display: "flex",
-                flexDirection: "column",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    color: "#9bff9b",
-                    fontSize: "10px",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  {memoryFullscreenCard === "live"
-                    ? "LIVE_HANGOUT"
-                    : `MEMORY_${String(memoryFullscreenCard || "").toUpperCase()}`}
-                </div>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <button
-                    type="button"
-                    onClick={() => moveFullscreenCard(-1)}
-                    aria-label="Previous card"
-                    title="Previous"
-                    style={{
-                      padding: "6px 10px",
-                      background: "#111",
-                      color: "#78b8ff",
-                      border: "1px solid #2a2a2a",
-                      cursor: "pointer",
-                      fontFamily: "monospace",
-                      fontSize: "10px",
-                    }}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="m15 18-6-6 6-6" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveFullscreenCard(1)}
-                    aria-label="Next card"
-                    title="Next"
-                    style={{
-                      padding: "6px 10px",
-                      background: "#111",
-                      color: "#78b8ff",
-                      border: "1px solid #2a2a2a",
-                      cursor: "pointer",
-                      fontFamily: "monospace",
-                      fontSize: "10px",
-                    }}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMemoryFullscreenCard(null)}
-                    aria-label="Close fullscreen"
-                    title="Close"
-                    style={{
-                      padding: "6px 10px",
-                      background: "#111",
-                      color: "#9bff9b",
-                      border: "1px solid #2a2a2a",
-                      cursor: "pointer",
-                      fontFamily: "monospace",
-                      fontSize: "10px",
-                    }}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M18 6 6 18" />
-                      <path d="m6 6 12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div style={{ width: "100%", minHeight: 0, flex: 1 }}>
-                {renderFullscreenMemoryCard()}
-              </div>
-            </div>
-          </div>
-        )}
+      <MemoryFullscreenOverlay
+        open={fullscreenOverlayVisible}
+        title={fullscreenOverlayTitle}
+        content={fullscreenCardContent}
+        onPrevious={() => moveFullscreenCard(-1)}
+        onNext={() => moveFullscreenCard(1)}
+        onClose={() => setMemoryFullscreenCard(null)}
+      />
     </>
   );
 }
