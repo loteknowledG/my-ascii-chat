@@ -12,7 +12,11 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "tts-natasha": "node tts-natasha.js",
-    "tts-natasha-play": "node tts-natasha-play.js"
+    "tts-natasha-play": "node tts-natasha-play.js",
+    "hook:test-mechanicus-last": "python .cursor/hooks/speak_last_sentence_mechanicus.py --self-test",
+    "hook:dry-mechanicus-last": "python .cursor/hooks/speak_last_sentence_mechanicus.py --dry-run",
+    "hook:smoke-mechanicus-voice": "powershell -NoProfile -Command \"Get-Content -Raw .cursor/hooks/sample-after-agent.json | python .cursor/hooks/speak_last_sentence_mechanicus.py\"",
+    "mechanicus:say": "python scripts/mechanicus_say.py"
   },
   "keywords": [],
   "author": "",

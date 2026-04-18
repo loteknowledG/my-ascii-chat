@@ -139,3 +139,7 @@ dist
 .recode
 .recode/changes.db
 /.playwright-cli
+
+# Cyberdeck → Cursor mechanicus mute flag (local)
+.cursor/hooks/mechanicus-cursor.muted
+.cursor/hooks/cursor-tts-voice.txt

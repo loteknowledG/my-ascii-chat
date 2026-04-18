@@ -2034,7 +2034,7 @@ export default function App() {
 
         {/* COL 3: TERMINAL */}
         <TerminalColumn
-          headerText={`${activeProvider.toUpperCase()} // ${secondColumnSelectionLabel} // ${
+          headerText={`${secondColumnSelectionLabel} // ${activeProvider.toUpperCase()} // ${
             modelID || "NO_MODEL"
           }`}
           headerClassName={

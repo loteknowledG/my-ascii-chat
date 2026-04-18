@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterAgentResponse": [
+      {
+        "command": "python -u .cursor/hooks/speak_last_sentence_mechanicus.py",
+        "timeout": 30
+      }
+    ]
+  }
+}

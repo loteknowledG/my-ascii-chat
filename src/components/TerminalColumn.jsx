@@ -82,11 +82,13 @@ export default function TerminalColumn({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2 custom-scrollbar flex flex-col">
-        {topPanel ? (
-          <div style={{ marginBottom: "16px" }}>{topPanel}</div>
-        ) : null}
+      {topPanel ? (
+        <div className="flex-shrink-0 px-4 pt-2 pb-1" style={{ overflow: "visible" }}>
+          {topPanel}
+        </div>
+      ) : null}
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-2 custom-scrollbar">
         {memoryPanels ? (
           <div style={{ marginBottom: "16px" }}>{memoryPanels}</div>
         ) : null}
