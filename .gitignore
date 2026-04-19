@@ -140,6 +140,9 @@ dist
 .recode/changes.db
 /.playwright-cli
 
+# Windows: accidental reserved-name file if something redirected to `nul` from repo root
+/nul
+
 # Cyberdeck → Cursor mechanicus mute flag (local)
 .cursor/hooks/mechanicus-cursor.muted
 .cursor/hooks/cursor-tts-voice.txt
