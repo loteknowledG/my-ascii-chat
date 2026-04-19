@@ -317,8 +317,9 @@ def main() -> int:
         popen_kw["stderr"] = tts_log
         vol = _read_cursor_tts_volume_override()
         cmd = [sys.executable, vp, "speak", voice_profile]
+        # One argv token so values like "-20%" are not parsed as unknown flags.
         if vol:
-            cmd += ["--volume", vol]
+            cmd.append(f"--volume={vol}")
         cmd.append(snippet)
         try:
             proc = subprocess.Popen(

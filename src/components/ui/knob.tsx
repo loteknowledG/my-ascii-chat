@@ -29,6 +29,10 @@ type KnobProps = {
   disabled?: boolean;
   showReadout?: boolean;
   showLabel?: boolean;
+  active?: boolean;
+  defaultActive?: boolean;
+  onActiveChange?: (active: boolean) => void;
+  clickTogglesActive?: boolean;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -80,6 +84,10 @@ export function Knob({
   disabled = false,
   showReadout = true,
   showLabel = true,
+  active,
+  defaultActive = true,
+  onActiveChange,
+  clickTogglesActive,
 }: KnobProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const hostRef = React.useRef<HTMLFieldSetElement>(null);
@@ -88,12 +96,17 @@ export function Knob({
   const lastPointerXRef = React.useRef<number | null>(null);
   const lastPointerYRef = React.useRef<number | null>(null);
   const dragAccumulatorRef = React.useRef(0);
+  const didDragRef = React.useRef(false);
+  const activeAtPointerDownRef = React.useRef(defaultActive);
   const inputId = React.useId();
   const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue);
   const [isDragging, setIsDragging] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
   const isControlled = typeof value === "number";
   const currentValue = isControlled ? value : uncontrolledValue;
+  const isActiveControlled = typeof active === "boolean";
+  const [uncontrolledActive, setUncontrolledActive] = React.useState(defaultActive);
+  const currentActive = isActiveControlled ? active : uncontrolledActive;
   const safeMin = Math.min(min, max);
   const safeMax = Math.max(min, max);
   const safeStep = step > 0 ? step : 1;
@@ -132,11 +145,23 @@ export function Knob({
   const balanceDash = `${balancePercent * 100} 100`;
   const tickCount = isTuner ? 12 : isBalance ? 10 : 8;
   const tickMarks = Array.from({ length: tickCount }, (_, index) => index);
+  const allowsActiveToggle = clickTogglesActive ?? mode === "power";
+  const isPressed = isDragging;
+  const ringStroke = currentActive
+    ? "#ff00ff"
+    : isLight
+      ? "#8f8c87"
+      : "#55595C";
+  const ringOpacity = currentActive ? 1 : 0.28;
 
   const normalizedValueRef = React.useRef(normalizedValue);
   React.useEffect(() => {
     normalizedValueRef.current = normalizedValue;
   }, [normalizedValue]);
+
+  React.useEffect(() => {
+    activeAtPointerDownRef.current = currentActive;
+  }, [currentActive]);
 
   const setValue = React.useCallback(
     (nextValue: number) => {
@@ -149,6 +174,16 @@ export function Knob({
       onValueChange?.(clampedValue);
     },
     [isControlled, onValueChange, safeMax, safeMin, safeStep],
+  );
+
+  const setActive = React.useCallback(
+    (nextActive: boolean) => {
+      if (!isActiveControlled) {
+        setUncontrolledActive(nextActive);
+      }
+      onActiveChange?.(nextActive);
+    },
+    [isActiveControlled, onActiveChange],
   );
 
   React.useEffect(() => {
@@ -177,6 +212,7 @@ export function Knob({
         return;
       }
 
+      didDragRef.current = true;
       event.preventDefault();
       const dragPixelsPerStep = (isTuner ? 6 : 8) / Math.max(dragMultiplier, 0.1);
       dragAccumulatorRef.current += delta / dragPixelsPerStep;
@@ -203,20 +239,43 @@ export function Knob({
       lastPointerXRef.current = null;
       lastPointerYRef.current = null;
       dragAccumulatorRef.current = 0;
+      const shouldToggleActive = allowsActiveToggle && !disabled && !didDragRef.current;
+      didDragRef.current = false;
       setIsDragging(false);
       inputRef.current?.select();
+
+      if (shouldToggleActive) {
+        setActive(!activeAtPointerDownRef.current);
+      }
+    };
+
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (dragPointerIdRef.current !== event.pointerId) {
+        return;
+      }
+
+      if (knobRef.current?.hasPointerCapture(event.pointerId)) {
+        knobRef.current.releasePointerCapture(event.pointerId);
+      }
+
+      dragPointerIdRef.current = null;
+      lastPointerXRef.current = null;
+      lastPointerYRef.current = null;
+      dragAccumulatorRef.current = 0;
+      didDragRef.current = false;
+      setIsDragging(false);
     };
 
     window.addEventListener("pointermove", handlePointerMove, { capture: true });
     window.addEventListener("pointerup", handlePointerUp, { capture: true });
-    window.addEventListener("pointercancel", handlePointerUp, { capture: true });
+    window.addEventListener("pointercancel", handlePointerCancel, { capture: true });
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove, { capture: true });
       window.removeEventListener("pointerup", handlePointerUp, { capture: true });
-      window.removeEventListener("pointercancel", handlePointerUp, { capture: true });
+      window.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
     };
-  }, [disabled, dragMultiplier, isDragging, safeStep, setValue]);
+  }, [allowsActiveToggle, disabled, dragMultiplier, isDragging, safeStep, setActive, setValue]);
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -293,10 +352,12 @@ export function Knob({
     }
 
     event.preventDefault();
+    activeAtPointerDownRef.current = currentActive;
     dragPointerIdRef.current = event.pointerId;
     lastPointerXRef.current = event.clientX;
     lastPointerYRef.current = event.clientY;
     dragAccumulatorRef.current = 0;
+    didDragRef.current = false;
     knobRef.current?.setPointerCapture(event.pointerId);
     setIsDragging(true);
     inputRef.current?.focus({ preventScroll: true });
@@ -325,10 +386,19 @@ export function Knob({
         ref={knobRef}
         className={cn(
           "relative mx-auto aspect-square w-full select-none rounded-full overflow-hidden touch-none transition-transform duration-150",
-          isHovered ? "scale-[1.02]" : "scale-100",
+          isPressed
+            ? "translate-y-[4px] scale-[0.95]"
+            : isHovered
+              ? "scale-[1.01]"
+              : "scale-100",
           isLight
             ? "shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-10px_18px_rgba(0,0,0,0.12)]"
             : "shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-14px_22px_rgba(0,0,0,0.52)]",
+          isPressed
+            ? isLight
+              ? "shadow-[inset_0_3px_10px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.32),0_3px_8px_rgba(0,0,0,0.16)]"
+              : "shadow-[inset_0_4px_12px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.06),0_4px_10px_rgba(0,0,0,0.38)]"
+            : "",
         )}
         style={{
           backgroundImage: isLight
@@ -339,6 +409,20 @@ export function Knob({
         onMouseLeave={() => setIsHovered(false)}
         onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
+        role={allowsActiveToggle ? "button" : undefined}
+        tabIndex={allowsActiveToggle ? 0 : undefined}
+        aria-pressed={allowsActiveToggle ? currentActive : undefined}
+        aria-label={allowsActiveToggle ? `${label} power ${currentActive ? "on" : "off"}` : undefined}
+        onKeyDown={(event) => {
+          if (!allowsActiveToggle || disabled) {
+            return;
+          }
+
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setActive(!currentActive);
+          }
+        }}
       >
         <div
           className={cn(
@@ -398,21 +482,23 @@ export function Knob({
                 }
                 pathLength="100"
                 fill="none"
-                stroke="#ff00ff"
+                stroke={ringStroke}
                 strokeWidth="5"
                 strokeLinecap="round"
                 strokeDasharray={balanceDash}
+                strokeOpacity={ringOpacity}
               />
             ) : null
           ) : (
             <path
               d="M20,76 A 40 40 0 1 1 80 76"
               fill="none"
-              stroke="#ff00ff"
+              stroke={ringStroke}
               strokeWidth="5"
               strokeLinecap="round"
               strokeDasharray="184 184"
               strokeDashoffset={powerOffset}
+              strokeOpacity={ringOpacity}
             />
           )}
         </svg>
@@ -436,10 +522,14 @@ export function Knob({
         </div>
         <div
           className={cn(
-            "pointer-events-none absolute left-1/2 top-1/2 z-20 h-[12%] w-[12%] -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_6px_rgba(0,0,0,0.25)]",
-            isLight
-              ? "border-[#8f8c87] bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.95),#ddd4ca_70%,#c4bbb0_100%)]"
-              : "border-[#181b1c] bg-[radial-gradient(circle_at_35%_35%,rgba(79,83,86,1),#3a3d40_70%,#232629_100%)]",
+            "pointer-events-none absolute left-1/2 top-1/2 z-20 h-[12%] w-[12%] -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_6px_rgba(0,0,0,0.25)] transition-transform duration-150",
+            currentActive
+              ? isLight
+                ? "border-[#8f8c87] bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.95),#ddd4ca_70%,#c4bbb0_100%)]"
+                : "border-[#181b1c] bg-[radial-gradient(circle_at_35%_35%,rgba(79,83,86,1),#3a3d40_70%,#232629_100%)]"
+              : isLight
+                ? "border-[#b3aca3] bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.78),#cfc7bc_70%,#b8aea3_100%)]"
+                : "border-[#2a2d30] bg-[radial-gradient(circle_at_35%_35%,rgba(56,60,63,1),#2a2d30_70%,#17191b_100%)]",
           )}
         />
         <div

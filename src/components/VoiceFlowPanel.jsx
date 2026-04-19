@@ -4,7 +4,6 @@ import { noCompactor } from "react-grid-layout/core";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-import VoiceAdaptiveWheel from "./VoiceAdaptiveWheel";
 import VoiceCard from "./VoiceCard";
 import VSCodeVoiceCard from "./VSCodeVoiceCard";
 import { Knob } from "./ui/knob";
@@ -14,45 +13,94 @@ import {
   CURSOR_TTS_VOLUME_UI_MAX,
   CURSOR_TTS_VOLUME_UI_MIN,
 } from "../lib/cursorTtsVolume";
-import { getAllVoiceProfiles, isDuplicateStyleVoiceName, resolveVoiceProfile } from "../lib/voiceProfiles";
-import { DEFAULT_CURSOR_TTS_PROFILE_ID } from "../lib/cursorTtsProfiles";
+import { resolveVoiceProfile } from "../lib/voiceProfiles";
+import {
+  DEFAULT_CURSOR_TTS_PROFILE_ID,
+  DEFAULT_CODEX_TTS_PROFILE_ID,
+  DEFAULT_VSCODE_TTS_PROFILE_ID,
+} from "../lib/cursorTtsProfiles";
 
 const VOICE_GRID_COLS = 12;
 const VOICE_GRID_MARGIN_X = 12;
 const VOICE_GRID_MARGIN_Y = 12;
 const VOICE_GRID_ROW_HEIGHT = 24;
 
-const BLANK_GRID_MIN_W = 2;
-const BLANK_GRID_MIN_H = 4;
+const VOICE_GRID_LAYOUT_STORAGE_KEY = "wyc_voice_grid_layout_v1";
+const VSCODE_VOICE_PROFILE_STORAGE_KEY = "wyc_vscode_voice_profile_v1";
 
-function colWidthForLayout(containerWidthPx, cols, marginX) {
-  if (!Number.isFinite(containerWidthPx) || containerWidthPx <= 0) return 0;
-  const usable = containerWidthPx - marginX * (cols + 1);
-  if (usable <= 0) return 0;
-  return usable / cols;
-}
+const DEFAULT_VOICE_GRID_LAYOUT = [
+  {
+    i: "cursor",
+    x: 0,
+    y: 0,
+    w: 4,
+    h: 6,
+    minW: 2,
+    minH: 4,
+    resizeHandles: ["e", "s", "se"],
+    isResizable: true,
+    isDraggable: true,
+  },
+  {
+    i: "vscode",
+    x: 4,
+    y: 0,
+    w: 4,
+    h: 6,
+    minW: 1,
+    minH: 2,
+    resizeHandles: ["e", "s", "se"],
+    isResizable: true,
+    isDraggable: true,
+  },
+  {
+    i: "codex",
+    x: 8,
+    y: 0,
+    w: 4,
+    h: 6,
+    minW: 1,
+    minH: 2,
+    resizeHandles: ["e", "s", "se"],
+    isResizable: true,
+    isDraggable: true,
+  },
+];
 
-function pixelWidthForW(containerWidthPx, w) {
-  const cw = colWidthForLayout(containerWidthPx, VOICE_GRID_COLS, VOICE_GRID_MARGIN_X);
-  if (cw <= 0 || !Number.isFinite(w) || w <= 0) return 0;
-  return Math.round(w * cw + VOICE_GRID_MARGIN_X * Math.max(0, w - 1));
-}
-
-function hForSquarePixelSide(sidePx) {
-  if (!Number.isFinite(sidePx) || sidePx <= 0) return BLANK_GRID_MIN_H;
-  return Math.max(BLANK_GRID_MIN_H, Math.round((sidePx + VOICE_GRID_MARGIN_Y) / (VOICE_GRID_ROW_HEIGHT + VOICE_GRID_MARGIN_Y)));
-}
-
-/** Keep Cursor card square while clamping within valid grid bounds. */
-function clampVoiceGridLayout(layout, containerWidthPx) {
-  return layout.map((item) => {
-    if (item.i !== "cursor") return item;
-    const w = Math.max(BLANK_GRID_MIN_W, Math.min(VOICE_GRID_COLS, Math.round(item.w)));
-    const measuredSide = pixelWidthForW(containerWidthPx, w);
-    const h = measuredSide ? hForSquarePixelSide(measuredSide) : Math.max(BLANK_GRID_MIN_H, Math.round(item.h));
-    if (w === item.w && h === item.h) return item;
-    return { ...item, w, h };
-  });
+function loadPersistedVoiceGridLayout() {
+  if (typeof window === "undefined") {
+    return DEFAULT_VOICE_GRID_LAYOUT.map((x) => ({ ...x }));
+  }
+  try {
+    const raw = window.localStorage.getItem(VOICE_GRID_LAYOUT_STORAGE_KEY);
+    if (!raw) return DEFAULT_VOICE_GRID_LAYOUT.map((x) => ({ ...x }));
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_VOICE_GRID_LAYOUT.map((x) => ({ ...x }));
+    const byId = new Map(
+      parsed
+        .filter((entry) => entry && typeof entry === "object" && typeof entry.i === "string")
+        .map((entry) => [entry.i, entry]),
+    );
+    return DEFAULT_VOICE_GRID_LAYOUT.map((fb) => {
+      const stored = byId.get(fb.i);
+      if (!stored) return { ...fb };
+      const num = (key, fallback, min, max) => {
+        const v = Number(stored[key]);
+        if (!Number.isFinite(v)) return fallback;
+        return Math.max(min, Math.min(max, Math.round(v)));
+      };
+      const minW = fb.minW ?? 1;
+      const minH = fb.minH ?? 1;
+      let w = num("w", fb.w, minW, VOICE_GRID_COLS);
+      let h = num("h", fb.h, minH, 60);
+      let x = num("x", fb.x, 0, VOICE_GRID_COLS - 1);
+      let y = num("y", fb.y, 0, 80);
+      x = Math.max(0, Math.min(x, Math.max(0, VOICE_GRID_COLS - w)));
+      return { ...fb, x, y, w, h };
+    });
+  } catch {
+    return DEFAULT_VOICE_GRID_LAYOUT.map((x) => ({ ...x }));
+  }
 }
 
 function PipelineShell({
@@ -161,91 +209,93 @@ function PipelineShell({
 
 const MECHANICUS_CURSOR_BRIDGE = "/__cyberdeck/mechanicus-cursor";
 
-/** ASCII START/STOP control — ported from asciimorphism `src/button/button.html`. */
-function AsciiStartStopButton({ running, disabled, onRunningChange, style }) {
-  const [pressed, setPressed] = useState(false);
-
-  const label = (() => {
-    if (pressed) {
-      return running
-        ? `\n   ┌──────┐\n   │ STOP │\n   └──────┘`
-        : `\n   ┌───────┐\n   │ START │\n   └───────┘`;
-    }
-    // Keep the source asciimorphism art exactly as authored.
-    return running
-      ? `  ┌──────┐\n  │ STOP │▒\n  └──────┘▒\n   ▒▒▒▒▒▒▒`
-      : `  ┌───────┐\n  │ START │▒\n  └───────┘▒\n   ▒▒▒▒▒▒▒▒`;
-  })();
-
-  const releaseToggle = () => {
-    if (!pressed) return;
-    setPressed(false);
-    if (disabled) return;
-    onRunningChange(!running);
-  };
-
-  const cancelPress = () => setPressed(false);
-
-  useEffect(() => {
-    if (disabled) setPressed(false);
-  }, [disabled]);
-
+function RealmorphPowerLamp({ enabled, disabled, style }) {
   return (
-    <pre
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-pressed={running}
-      aria-disabled={disabled}
-      aria-label={running ? "Cursor after-reply TTS on — press to stop" : "Cursor after-reply TTS off — press to start"}
-      onMouseDown={(e) => {
-        if (disabled || e.button !== 0) return;
-        e.preventDefault();
-        setPressed(true);
-      }}
-      onMouseUp={releaseToggle}
-      onMouseLeave={cancelPress}
-      onTouchStart={(e) => {
-        if (disabled) return;
-        e.preventDefault();
-        setPressed(true);
-      }}
-      onTouchEnd={releaseToggle}
-      onKeyDown={(e) => {
-        if (disabled) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onRunningChange(!running);
-        }
-      }}
+    <div
+      aria-hidden="true"
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 12px",
+        margin: 0,
+        borderRadius: 999,
+        border: enabled ? "1px solid rgba(57, 255, 20, 0.34)" : "1px solid rgba(201, 162, 39, 0.28)",
+        background: enabled
+          ? "linear-gradient(180deg, rgba(12, 20, 7, 0.96), rgba(5, 8, 3, 0.99))"
+          : "linear-gradient(180deg, rgba(24, 18, 8, 0.96), rgba(8, 6, 2, 0.99))",
+        boxShadow:
+          "0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 12px 24px rgba(0, 0, 0, 0.25)",
+        color: enabled ? "#b3ff95" : "#d7be6a",
         fontFamily:
           '"Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", "Courier New", ui-monospace, monospace',
-        fontSize: 10,
+        fontSize: 8,
         lineHeight: 1,
-        letterSpacing: 0,
-        margin: 0,
-        whiteSpace: "pre",
-        cursor: disabled ? "default" : "pointer",
+        letterSpacing: "0.22em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        cursor: "default",
         userSelect: "none",
-        transition: "color 0.12s ease, transform 0.08s ease, text-shadow 0.12s ease, opacity 0.12s ease",
-        color: disabled ? (running ? "#8a1f1f" : "#13690a") : running ? "#ff3a3a" : "#39ff14",
-        textShadow: disabled
-          ? "none"
-          : running
-            ? "0 0 8px rgba(255, 58, 58, 0.22)"
-            : "0 0 8px rgba(57, 255, 20, 0.22)",
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.55 : 1,
         ...style,
       }}
     >
-      {label}
-    </pre>
+      <span>Realmorph Shim</span>
+      <span
+        style={{
+          position: "relative",
+          flexShrink: 0,
+          width: 54,
+          height: 22,
+          borderRadius: 999,
+          border: enabled ? "1px solid rgba(57, 255, 20, 0.24)" : "1px solid rgba(201, 162, 39, 0.2)",
+          background: enabled
+            ? "linear-gradient(180deg, rgba(57, 255, 20, 0.18), rgba(57, 255, 20, 0.06))"
+            : "linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))",
+          boxShadow:
+            "inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.35)",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: enabled ? 30 : 2,
+            width: 18,
+            height: 18,
+            borderRadius: 999,
+            border: enabled ? "1px solid rgba(57, 255, 20, 0.35)" : "1px solid rgba(201, 162, 39, 0.28)",
+            background: enabled
+              ? "radial-gradient(circle at 35% 35%, rgba(220, 255, 204, 0.98), rgba(125, 255, 90, 0.92) 68%, rgba(57, 255, 20, 0.92) 100%)"
+              : "radial-gradient(circle at 35% 35%, rgba(250, 238, 198, 0.98), rgba(201, 162, 39, 0.9) 72%, rgba(122, 92, 18, 0.92) 100%)",
+            boxShadow: enabled
+              ? "0 0 10px rgba(57, 255, 20, 0.22), 0 2px 8px rgba(0, 0, 0, 0.35)"
+              : "0 0 10px rgba(201, 162, 39, 0.18), 0 2px 8px rgba(0, 0, 0, 0.35)",
+            transition: "left 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease",
+          }}
+        />
+        <span
+          style={{
+            position: "absolute",
+            right: 7,
+            top: 0,
+            bottom: 0,
+            display: "flex",
+            alignItems: "center",
+            color: enabled ? "#9cff76" : "#8f8f8f",
+            fontSize: 7,
+            letterSpacing: "0.18em",
+          }}
+        >
+          {enabled ? "ON" : "OFF"}
+        </span>
+      </span>
+    </div>
   );
 }
 
 function MechanicusCursorStage({ gridW, gridH }) {
   const accent = "#c9a227";
-  const cursorWheelRowHeight = Math.max(20, Math.min(38, Math.round((24 * (gridH || 6)) / 6)));
   const [muted, setMuted] = useState(false);
   const [hookVolume, setHookVolume] = useState(CURSOR_TTS_VOLUME_UI_DEFAULT);
   const [profile, setProfile] = useState(DEFAULT_CURSOR_TTS_PROFILE_ID);
@@ -255,31 +305,6 @@ function MechanicusCursorStage({ gridW, gridH }) {
   const [voiceListNonce, setVoiceListNonce] = useState(0);
   const normalizeProfileId = (value) => String(value || "").replace(/(?:-copy)+$/i, "");
   const effectiveProfile = normalizeProfileId(profile);
-
-  const cursorWheelOptions = useMemo(() => {
-    const seen = new Map();
-    for (const p of getAllVoiceProfiles()) {
-      if (isDuplicateStyleVoiceName(p?.id) || isDuplicateStyleVoiceName(p?.label)) continue;
-      if (p?.id && !seen.has(p.id)) {
-        seen.set(p.id, {
-          id: p.id,
-          label: p.label || p.id,
-          description: p.description || "",
-        });
-      }
-    }
-    const arr = [...seen.values()].sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
-    );
-    if (effectiveProfile && !seen.has(effectiveProfile)) {
-      arr.push({ id: effectiveProfile, label: effectiveProfile, description: "(from hook file)" });
-    }
-    return arr.map((o) => ({
-      label: o.label,
-      value: o.id,
-      textValue: `${o.label} ${o.description} ${o.id}`,
-    }));
-  }, [effectiveProfile, voiceListNonce]);
 
   const hookOn = !muted;
 
@@ -303,7 +328,6 @@ function MechanicusCursorStage({ gridW, gridH }) {
       }
       setBridge(!!j.bridge);
       setErr(null);
-      setVoiceListNonce((n) => n + 1);
       return j;
     } catch {
       setBridge(false);
@@ -385,7 +409,6 @@ function MechanicusCursorStage({ gridW, gridH }) {
           setHookVolume(clampCursorTtsVolumeUi(j2.volume));
         }
         setBridge(true);
-        setVoiceListNonce((n) => n + 1);
         await refresh();
       } catch (e) {
         setErr(String(e?.message || e));
@@ -439,14 +462,6 @@ function MechanicusCursorStage({ gridW, gridH }) {
     void (async () => {
       await postState({ muted: !on, profile: pid });
       await muteCycleRecover(pid);
-    })();
-  };
-
-  const setVoiceProfile = (id) => {
-    const pid = normalizeProfileId(id);
-    void (async () => {
-      await postState({ profile: pid });
-      await resyncHookFiles(pid);
     })();
   };
 
@@ -538,39 +553,72 @@ function MechanicusCursorStage({ gridW, gridH }) {
             <div
               style={{
                 pointerEvents: "auto",
-                touchAction: "none",
-                transform: "scale(0.58)",
-                transformOrigin: "50% 100%",
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 12,
               }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              title={`Level ${hookVolume}%`}
             >
-              <Knob
-                label="Level"
-                unit="%"
-                min={CURSOR_TTS_VOLUME_UI_MIN}
-                max={CURSOR_TTS_VOLUME_UI_MAX}
-                step={1}
-                value={hookVolume}
-                onValueChange={setHookVolumeFromUi}
-                wheelMultiplier={3.6}
-                dragMultiplier={4.4}
-                size="sm"
-                theme="dark"
-                showReadout={false}
-                showLabel={false}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "10px 12px 9px",
+                  borderRadius: 18,
+                  border: "1px solid rgba(201, 162, 39, 0.22)",
+                  background:
+                    "linear-gradient(180deg, rgba(14, 10, 4, 0.94), rgba(5, 4, 2, 0.98))",
+                  boxShadow:
+                    "0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 16px 36px rgba(0, 0, 0, 0.34), 0 0 24px rgba(201, 162, 39, 0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    touchAction: "none",
+                    transform: "scale(0.66)",
+                    transformOrigin: "50% 100%",
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  title={`Level ${hookVolume}% · click dial to arm / disarm`}
+                >
+                  <Knob
+                    label="Level"
+                    unit="%"
+                    min={CURSOR_TTS_VOLUME_UI_MIN}
+                    max={CURSOR_TTS_VOLUME_UI_MAX}
+                    step={1}
+                    value={hookVolume}
+                    onValueChange={setHookVolumeFromUi}
+                    active={hookOn}
+                    clickTogglesActive
+                    onActiveChange={setHookEnabled}
+                    wheelMultiplier={0.6}
+                    dragMultiplier={1.2}
+                    size="sm"
+                    theme="dark"
+                    showReadout={false}
+                    showLabel={false}
+                    disabled={busy || !bridge}
+                    className="w-16 shrink-0"
+                  />
+                </div>
+              <RealmorphPowerLamp
+                enabled={hookOn}
                 disabled={busy || !bridge}
-                className="w-16 shrink-0"
               />
             </div>
-            <div style={{ pointerEvents: "auto", lineHeight: 0 }}>
-              <AsciiStartStopButton
-                running={hookOn}
-                disabled={busy || !bridge}
-                onRunningChange={setHookEnabled}
-              />
-            </div>
+          </div>
+            <div
+              style={{
+                height: 1,
+                width: "100%",
+                maxWidth: 238,
+                background:
+                  "linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.22), rgba(57, 255, 20, 0.16), transparent)",
+              }}
+            />
           </div>
 
           <div
@@ -587,19 +635,28 @@ function MechanicusCursorStage({ gridW, gridH }) {
               overflow: "visible",
             }}
           >
-            {cursorWheelOptions.length ? (
-              <VoiceAdaptiveWheel
-                value={effectiveProfile}
-                onValueChange={(value) => setVoiceProfile(value)}
-                options={cursorWheelOptions}
-                wrapperClassName="border-0"
-                dimmed={busy || !bridge}
-                accent={accent}
-                fullWidth
-                optionItemHeight={cursorWheelRowHeight}
-                bezelTitle="Cursor"
-              />
-            ) : null}
+            <div
+              style={{
+                width: "100%",
+                display: "grid",
+                gap: 6,
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "1px solid rgba(201, 162, 39, 0.22)",
+                background: "rgba(10, 8, 3, 0.92)",
+                boxShadow: "0 0 0 1px rgba(201, 162, 39, 0.08) inset",
+              }}
+            >
+              <div style={{ color: "#7a7a7a", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                Fixed voice
+              </div>
+              <div style={{ color: "#f7e6b0", fontFamily: "monospace", fontSize: 14 }}>
+                {cursorVoiceResolved?.label || "Tech Priest"}
+              </div>
+              <div style={{ color: "#a8a8a8", fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 8, lineHeight: 1.45 }}>
+                {String(cursorVoiceResolved?.description || "").trim() || "This AI uses one locked voice profile."}
+              </div>
+            </div>
           </div>
 
           <div
@@ -626,6 +683,21 @@ function MechanicusCursorStage({ gridW, gridH }) {
             >
               {String(cursorVoiceResolved?.description || "").trim() ||
                 "No short description for this profile."}
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: '"Cascadia Mono", ui-monospace, monospace',
+                fontSize: 7,
+                lineHeight: 1.4,
+                letterSpacing: "0.04em",
+                color: "rgba(155, 255, 155, 0.28)",
+                wordBreak: "break-word",
+              }}
+            >
+              {
+                "// relay: codex read the manifest aloud like a briefing — cursor=warp spider, vscode=tech priest, codex=scribe already matches cursorTtsProfiles.js; nothing was broken, only re-narrated. he still scripts how you feel about it. bus nominal."
+              }
             </div>
           </div>
 
@@ -662,7 +734,7 @@ function useVscodeAgentVoicePoller(profileId) {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
-    const pid = String(profileRef.current || "").trim() || DEFAULT_CURSOR_TTS_PROFILE_ID;
+    const pid = String(profileRef.current || "").trim() || DEFAULT_VSCODE_TTS_PROFILE_ID;
     try {
       const res = await fetch("/__cyberdeck/vscode-voice", {
         method: "POST",
@@ -695,49 +767,39 @@ function useVscodeAgentVoicePoller(profileId) {
   return { start, stop };
 }
 
+function loadPersistedVscodeVoiceProfileId() {
+  if (typeof window === "undefined") return DEFAULT_VSCODE_TTS_PROFILE_ID;
+  try {
+    const raw = window.localStorage.getItem(VSCODE_VOICE_PROFILE_STORAGE_KEY);
+    const id = String(raw || "").trim();
+    if (id) return id;
+  } catch {
+    /* private mode */
+  }
+  return DEFAULT_VSCODE_TTS_PROFILE_ID;
+}
+
 function VoiceFlowPanel({ compact = false } = {}) {
-  const [vscodeProfileId, setVscodeProfileId] = useState(DEFAULT_CURSOR_TTS_PROFILE_ID);
+  const [vscodeProfileId, setVscodeProfileId] = useState(loadPersistedVscodeVoiceProfileId);
   const vscodeVoicePoller = useVscodeAgentVoicePoller(vscodeProfileId);
 
-  const [voiceGridLayout, setVoiceGridLayout] = useState(() => [
-    {
-      i: "cursor",
-      x: 0,
-      y: 0,
-      w: 4,
-      h: 6,
-      minW: 2,
-      minH: 4,
-      resizeHandles: ["e", "s", "se"],
-      isResizable: true,
-      isDraggable: true,
-    },
-    {
-      i: "vscode",
-      x: 4,
-      y: 0,
-      w: 4, // match cursor card width
-      h: 6, // match cursor card height
-      minW: 1, // allow smaller min width
-      minH: 2, // allow smaller min height
-      resizeHandles: ["e", "s", "se"],
-      isResizable: true,
-      isDraggable: true,
-    },
-    {
-      i: "codex",
-      x: 8,
-      y: 0,
-      w: 4,
-      h: 6,
-      minW: 1,
-      minH: 2,
-      resizeHandles: ["e", "s", "se"],
-      isResizable: true,
-      isDraggable: true,
-    },
-  ]);
-  const [voiceGridContainerWidth, setVoiceGridContainerWidth] = useState(0);
+  const [voiceGridLayout, setVoiceGridLayout] = useState(() => loadPersistedVoiceGridLayout());
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VOICE_GRID_LAYOUT_STORAGE_KEY, JSON.stringify(voiceGridLayout));
+    } catch {
+      /* quota / private mode */
+    }
+  }, [voiceGridLayout]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VSCODE_VOICE_PROFILE_STORAGE_KEY, vscodeProfileId);
+    } catch {
+      /* quota / private mode */
+    }
+  }, [vscodeProfileId]);
 
   const cursorGridItem = useMemo(() => voiceGridLayout.find((item) => item.i === "cursor"), [voiceGridLayout]);
   const cursorGridW = cursorGridItem?.w ?? 4;
@@ -749,8 +811,8 @@ function VoiceFlowPanel({ compact = false } = {}) {
   const codexGridW = codexGridItem?.w ?? 4;
   const codexGridH = codexGridItem?.h ?? 6;
 
-  const handleVoiceGridLayoutChange = (nextLayout, measuredWidth) => {
-    setVoiceGridLayout(clampVoiceGridLayout(nextLayout, measuredWidth || voiceGridContainerWidth));
+  const handleVoiceGridLayoutChange = (nextLayout) => {
+    setVoiceGridLayout(nextLayout);
   };
 
   return (
@@ -793,7 +855,7 @@ function VoiceFlowPanel({ compact = false } = {}) {
         }}
       >
         <div style={{ minHeight: 0 }}>
-          <VoiceGrid layout={voiceGridLayout} onLayoutChange={handleVoiceGridLayoutChange} onContainerWidth={setVoiceGridContainerWidth}>
+          <VoiceGrid layout={voiceGridLayout} onLayoutChange={handleVoiceGridLayoutChange}>
             <div key="cursor" style={{ minHeight: 0, height: "100%" }}>
               <MechanicusCursorStage gridW={cursorGridW} gridH={cursorGridH} />
             </div>
@@ -855,8 +917,9 @@ function VoiceFlowPanel({ compact = false } = {}) {
                 compact
                 title="CODEX"
                 accent="#9bff9b"
-                defaultProfile="jenna-jacket"
+                defaultProfile={DEFAULT_CODEX_TTS_PROFILE_ID}
                 sampleText="Codex online. Drop the next prompt here."
+                showTextInput={false}
                 style={{ marginTop: 0, height: "100%", width: "100%" }}
               />
             </div>
@@ -867,16 +930,12 @@ function VoiceFlowPanel({ compact = false } = {}) {
   );
 }
 
-function VoiceGrid({ layout, onLayoutChange, onContainerWidth, children }) {
+function VoiceGrid({ layout, onLayoutChange, children }) {
   const { width, containerRef, mounted } = useContainerWidth();
   const accent = "rgba(127,215,255,0.9)";
 
-  useEffect(() => {
-    onContainerWidth?.(width || 0);
-  }, [onContainerWidth, width]);
-
   const handleLayoutChange = (nextLayout) => {
-    onLayoutChange?.(nextLayout, width || 0);
+    onLayoutChange?.(nextLayout);
   };
 
   const resizeHandle = (axis, ref) => {

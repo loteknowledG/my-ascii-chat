@@ -1,13 +1,13 @@
 import MemoryMomentCard from "./MemoryMomentCard";
 import AsciiStartStopButton from "./AsciiStartStopButton";
 import VoiceAdaptiveWheel from "./VoiceAdaptiveWheel";
-import { CURSOR_TTS_PROFILES } from "../lib/cursorTtsProfiles";
+import { CURSOR_TTS_PROFILES, DEFAULT_VSCODE_TTS_PROFILE_ID } from "../lib/cursorTtsProfiles";
 import { resolveVoiceProfile } from "../lib/voiceProfiles";
 
 import { useMemo, useState } from "react";
 
 export default function VSCodeVoiceCard({
-  selectedProfile,
+  selectedProfile = DEFAULT_VSCODE_TTS_PROFILE_ID,
   onProfileChange,
   onStart,
   onStop,
@@ -82,10 +82,11 @@ export default function VSCodeVoiceCard({
         >
           <VoiceAdaptiveWheel
             value={selectedProfile}
-            onValueChange={onProfileChange}
+            onValueChange={onProfileChange ?? (() => {})}
             options={CURSOR_TTS_PROFILES.map((p) => ({ value: p.id, label: p.label }))}
             bezelTitle="VS Code"
             fullWidth
+            accent={accent}
           />
           <div
             style={{
@@ -101,19 +102,39 @@ export default function VSCodeVoiceCard({
           >
             {String(resolved?.description || "").trim() || "No short description for this profile."}
           </div>
+          <div
+            style={{
+              width: "100%",
+              color: "#8a8a8a",
+              fontSize: 9,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              textAlign: "center",
+              paddingTop: 2,
+            }}
+          >
+            Voice status: {running ? "active" : "idle"}
+          </div>
         </div>
-        <AsciiStartStopButton
-          running={running}
-          disabled={false}
-          onRunningChange={handleToggle}
-          ariaLabelOn="VS Code voice on, press to stop"
-          ariaLabelOff="VS Code voice off, press to start"
+        <div
           style={{
             position: "absolute",
-            right: 16,
+            left: 0,
+            right: 0,
             bottom: 10,
+            display: "flex",
+            justifyContent: "center",
+            pointerEvents: "auto",
           }}
-        />
+        >
+          <AsciiStartStopButton
+            running={running}
+            disabled={false}
+            onRunningChange={handleToggle}
+            ariaLabelOn="VS Code voice on, press to stop"
+            ariaLabelOff="VS Code voice off, press to start"
+          />
+        </div>
       </div>
     </MemoryMomentCard>
   );

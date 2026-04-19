@@ -23,5 +23,6 @@ The harness and memory contract live in the sibling repo:
 - runtime routing is delegated to Cognosys
 - keeping the harness contract separate from the app shell
 - voice playback uses remote TTS when reachable, then falls back to browser speech synthesis
-- voice rail includes Cursor, VS Code, and Codex cards
-- Cursor now shows a Realmorph Shim knob to the left of the start/stop control
+- the voice tuner is a separate profile lab with a preview screen, base-profile chips, and locale/tuning controls
+- voice rail maps Cursor to Warp Spider, VS Code to Tech Priest with the extra echo layer, and Codex to a dedicated Datasmith Scribe profile with binary chatter and metallic shimmer
+- Cursor now shows a Realmorph Shim knob to the left of the start/stop control; pressing the dial face toggles the active state while drag and wheel still tune volume

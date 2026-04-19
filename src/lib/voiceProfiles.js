@@ -32,6 +32,22 @@ export const voiceProfiles = [
     aliases: ["mechanicus", "machine liturgy", "tech priest", "adeptus mechanicus", "war chant"],
   },
   {
+    id: "codex-scribe",
+    label: "Codex Datasmith Scribe",
+    description: "Cold archive voice with metallic circuitry and binary chatter for Codex commentary, recall, and datasmith-litany output.",
+    browserVoice: "en-US-AriaNeural",
+    nativeVoice: "Microsoft David Desktop - English (United States)",
+    forceNativeTTS: false,
+    rate: 0.86,
+    pitch: 0.72,
+    volume: 0.97,
+    ttsRate: -10,
+    ttsPitch: -5,
+    ttsVolume: 1,
+    effect: "codex",
+    aliases: ["codex", "scribe", "archive", "vault", "librarian"],
+  },
+  {
     id: "warp-spider",
     label: "Warp Spider",
     description:

@@ -14,6 +14,7 @@ import JustifiedMasonry from "./components/JustifiedMasonry";
 import TerminalColumn from "./components/TerminalColumn";
 import MemoryFullscreenOverlay from "./components/MemoryFullscreenOverlay";
 import VoiceFlowPanel from "./components/VoiceFlowPanel";
+import { DEFAULT_CURSOR_TTS_PROFILE_ID } from "./lib/cursorTtsProfiles";
 
 const APP_STATE_KEY = "wyc_app_state_v1";
 
@@ -126,6 +127,7 @@ export default function App() {
   const [isDrawerMode, setIsDrawerMode] = useState(
     () => window.matchMedia?.("(max-width: 980px)")?.matches ?? false,
   );
+  const compact = isDrawerMode;
   const [drawerProgress, setDrawerProgress] = useState(
     () => persistedState.drawerProgress ?? 0,
   );
@@ -155,6 +157,33 @@ export default function App() {
   );
   const [memoryViewStatus, setMemoryViewStatus] = useState(
     () => persistedState.memoryViewStatus || "VIEW_NOT_LOADED",
+  );
+  const [voiceTunerProfileId, setVoiceTunerProfileId] = useState(
+    () => persistedState.voiceTunerProfileId || DEFAULT_CURSOR_TTS_PROFILE_ID,
+  );
+  const [voiceTunerModelMode, setVoiceTunerModelMode] = useState(
+    () => persistedState.voiceTunerModelMode || "tts",
+  );
+  const [voiceTunerLanguage, setVoiceTunerLanguage] = useState(
+    () => persistedState.voiceTunerLanguage || "en-US",
+  );
+  const [voiceTunerLanguageVoice, setVoiceTunerLanguageVoice] = useState(
+    () => persistedState.voiceTunerLanguageVoice || "JennyNeural",
+  );
+  const [voiceTunerSpeakMode, setVoiceTunerSpeakMode] = useState(
+    () => persistedState.voiceTunerSpeakMode || "conversation",
+  );
+  const [voiceTunerSpeakerMode, setVoiceTunerSpeakerMode] = useState(
+    () => persistedState.voiceTunerSpeakerMode || "auto",
+  );
+  const [voiceTunerTtsRate, setVoiceTunerTtsRate] = useState(
+    () => persistedState.voiceTunerTtsRate || "0",
+  );
+  const [voiceTunerTtsPitch, setVoiceTunerTtsPitch] = useState(
+    () => persistedState.voiceTunerTtsPitch || "0",
+  );
+  const [voiceTunerTtsVolume, setVoiceTunerTtsVolume] = useState(
+    () => persistedState.voiceTunerTtsVolume || "0",
   );
   const messageLogRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -328,6 +357,15 @@ export default function App() {
       memorySearchResults,
       memoryViewStatus,
       lastMemoryContext,
+      voiceTunerProfileId,
+      voiceTunerModelMode,
+      voiceTunerLanguage,
+      voiceTunerLanguageVoice,
+      voiceTunerSpeakMode,
+      voiceTunerSpeakerMode,
+      voiceTunerTtsRate,
+      voiceTunerTtsPitch,
+      voiceTunerTtsVolume,
     });
   }, [
     booted,
@@ -351,6 +389,15 @@ export default function App() {
     memorySearchResults,
     memoryViewStatus,
     lastMemoryContext,
+    voiceTunerProfileId,
+    voiceTunerModelMode,
+    voiceTunerLanguage,
+    voiceTunerLanguageVoice,
+    voiceTunerSpeakMode,
+    voiceTunerSpeakerMode,
+    voiceTunerTtsRate,
+    voiceTunerTtsPitch,
+    voiceTunerTtsVolume,
   ]);
 
   const pushNetworkEvent = (provider, status, detail = "") => {
@@ -1622,7 +1669,18 @@ export default function App() {
   );
   const speakCards =
     server === "b" ? (
-      <VoiceFlowPanel compact />
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          maxHeight: compact ? "min(76vh, calc(100dvh - 170px))" : "min(82vh, calc(100dvh - 130px))",
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingRight: 2,
+        }}
+      >
+        <VoiceFlowPanel compact />
+      </div>
     ) : null;
   const fullscreenOverlayVisible = !!memoryFullscreenCard && Boolean(activeMomentDockKey);
   const fullscreenOverlayTitle =

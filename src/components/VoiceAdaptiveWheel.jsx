@@ -1,8 +1,10 @@
 import { WheelPicker, WheelPickerWrapper } from "./wheel-picker";
 
+import { cn } from "@/lib/utils";
+
 /**
- * Stable rotary wheel + single bezel shell (no nested 3D, no flex squash, no clip).
- * @ncdai: visibleCount must be a multiple of 4 — 8 keeps the “TV” compact while staying valid.
+ * Single rotary wheel in a bezel. {@link https://github.com/ncdai/react-wheel-picker @ncdai/react-wheel-picker}:
+ * {@code visibleCount} must be a multiple of {@code 4}.
  */
 export default function VoiceAdaptiveWheel({
   value,
@@ -12,17 +14,17 @@ export default function VoiceAdaptiveWheel({
   wrapperClassName = "",
   dimmed = false,
   maxWidthPx = 240,
-  /** When true, stretch to parent width (no max-width cap, no horizontal centering). */
   fullWidth = false,
-  /** Wheel viewport rows (must be multiple of 4 for @ncdai/react-wheel-picker). */
   visibleCount = 8,
-  /** Per-row pixel height; larger values make the TV taller. */
   optionItemHeight = 22,
   accent = "#6a6048",
-  /** Small caption on the widget, above the TV bezel (optional). */
   bezelTitle = "",
 }) {
-  const glow = `${accent}35`;
+  const pickerOptions = options.map((o) => ({
+    value: o.value,
+    label: o.label,
+    textValue: typeof o.label === "string" ? o.label : String(o.value),
+  }));
 
   return (
     <div
@@ -48,57 +50,40 @@ export default function VoiceAdaptiveWheel({
             fontFamily: "monospace",
             fontSize: 7,
             lineHeight: 1.2,
-            letterSpacing: "0.06em",
+            letterSpacing: "0.14em",
             textTransform: "uppercase",
-            color: "rgba(200,200,200,0.42)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            color: `${accent}cc`,
           }}
         >
           {bezelTitle}
         </div>
       ) : null}
-      {/* Single bezel shell; avoid nested inner frame. */}
       <div
         style={{
-          borderRadius: 30,
-          border: "2px solid #12100e",
-          background: `
-            radial-gradient(ellipse 95% 80% at 50% 16%, rgba(255,255,255,0.07), transparent 40%),
-            radial-gradient(ellipse 90% 72% at 50% 28%, rgba(40,56,44,0.18), transparent 52%),
-            radial-gradient(ellipse 110% 90% at 50% 100%, rgba(0,0,0,0.55), transparent 48%),
-            linear-gradient(168deg, #151311, #070605)
-          `,
-          boxShadow: `
-            0 0 0 1px rgba(255,255,255,0.04) inset,
-            inset 0 6px 18px rgba(0,0,0,0.45),
-            inset 0 1px 0 rgba(255,255,255,0.05),
-            0 8px 22px rgba(0,0,0,0.55),
-            0 0 18px ${glow}
-          `,
-          padding: "6px 7px",
-          overflow: "visible",
+          borderRadius: 14,
+          border: `1px solid ${accent}38`,
+          background: "linear-gradient(180deg, rgba(10,12,16,0.96), rgba(4,5,8,0.98))",
+          boxShadow: `0 0 0 1px ${accent}14 inset, 0 14px 32px rgba(0,0,0,0.42)`,
+          padding: "4px 2px 6px",
         }}
       >
-        {options.length ? (
-          <WheelPickerWrapper
-            className={`w-full min-w-0 max-w-full border-0 bg-transparent px-0 py-0 shadow-none ${wrapperClassName}`.trim()}
-          >
-            <WheelPicker
-              value={value}
-              onValueChange={onValueChange}
-              options={options}
-              classNames={{
-                optionItem: "whitespace-nowrap text-[11px]",
-                highlightItem: "whitespace-nowrap text-[11px]",
-              }}
-              visibleCount={visibleCount}
-              optionItemHeight={optionItemHeight}
-              infinite={infinite}
-            />
-          </WheelPickerWrapper>
-        ) : null}
+        <WheelPickerWrapper
+          className={cn(
+            "!rounded-lg !border-zinc-700/50 !bg-zinc-950/85 !px-0 !shadow-none",
+            wrapperClassName,
+          )}
+        >
+          <WheelPicker
+            value={value}
+            onValueChange={onValueChange}
+            options={pickerOptions}
+            infinite={infinite}
+            visibleCount={visibleCount}
+            optionItemHeight={optionItemHeight}
+            dragSensitivity={1.05}
+            scrollSensitivity={1.05}
+          />
+        </WheelPickerWrapper>
       </div>
     </div>
   );

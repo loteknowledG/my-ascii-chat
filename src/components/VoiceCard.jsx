@@ -81,6 +81,189 @@ function pickBrowserVoice(voices, profile) {
   return voices[0] || null;
 }
 
+function disconnectNode(node) {
+  try {
+    node?.disconnect?.();
+  } catch {
+    // Best effort cleanup only.
+  }
+}
+
+function makeNoiseBuffer(context) {
+  const durationSeconds = 1.5;
+  const sampleRate = context.sampleRate;
+  const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * durationSeconds)), sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < channel.length; i += 1) {
+    channel[i] = (Math.random() * 2 - 1) * 0.35;
+  }
+  return buffer;
+}
+
+function makeDriveCurve(amount = 14) {
+  const samples = 44100;
+  const curve = new Float32Array(samples);
+  const k = Number.isFinite(amount) ? amount : 14;
+  for (let i = 0; i < samples; i += 1) {
+    const x = (i * 2) / samples - 1;
+    const ax = Math.abs(x);
+    curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * ax);
+  }
+  return curve;
+}
+
+function createCodexElectricFx(context, audioElement, outputGainValue) {
+  const source = context.createMediaElementSource(audioElement);
+  const masterGain = context.createGain();
+  const dryGain = context.createGain();
+  const wetGain = context.createGain();
+  const highPass = context.createBiquadFilter();
+  const bandPass = context.createBiquadFilter();
+  const notchA = context.createBiquadFilter();
+  const notchB = context.createBiquadFilter();
+  const shelf = context.createBiquadFilter();
+  const lowPass = context.createBiquadFilter();
+  const shaper = context.createWaveShaper();
+  const noiseSource = context.createBufferSource();
+  const noiseBandPass = context.createBiquadFilter();
+  const noiseGain = context.createGain();
+  const lfo = context.createOscillator();
+  const lfoDepth = context.createGain();
+  const flutter = context.createOscillator();
+  const flutterDepth = context.createGain();
+  const ringMod = context.createOscillator();
+  const ringDepth = context.createGain();
+
+  masterGain.gain.value = outputGainValue;
+  dryGain.gain.value = 0.34;
+  wetGain.gain.value = 0.66;
+  highPass.type = "highpass";
+  highPass.frequency.value = 480;
+  bandPass.type = "bandpass";
+  bandPass.frequency.value = 2920;
+  bandPass.Q.value = 3.1;
+  notchA.type = "notch";
+  notchA.frequency.value = 1080;
+  notchA.Q.value = 14;
+  notchB.type = "notch";
+  notchB.frequency.value = 2140;
+  notchB.Q.value = 16;
+  shelf.type = "highshelf";
+  shelf.frequency.value = 4300;
+  shelf.gain.value = 7;
+  lowPass.type = "lowpass";
+  lowPass.frequency.value = 6800;
+  shaper.curve = makeDriveCurve(18);
+  shaper.oversample = "4x";
+  noiseSource.buffer = makeNoiseBuffer(context);
+  noiseSource.loop = true;
+  noiseBandPass.type = "bandpass";
+  noiseBandPass.frequency.value = 6200;
+  noiseBandPass.Q.value = 14;
+  noiseGain.gain.value = 0.011;
+  lfo.frequency.value = 9;
+  lfoDepth.gain.value = 140;
+  flutter.frequency.value = 14;
+  flutterDepth.gain.value = 0.018;
+  ringMod.type = "square";
+  ringMod.frequency.value = 760;
+  ringDepth.gain.value = 0.022;
+
+  source.connect(dryGain);
+  dryGain.connect(masterGain);
+
+  source.connect(highPass);
+  highPass.connect(bandPass);
+  bandPass.connect(notchA);
+  notchA.connect(notchB);
+  notchB.connect(shaper);
+  shaper.connect(shelf);
+  shelf.connect(lowPass);
+  lowPass.connect(wetGain);
+  wetGain.connect(masterGain);
+
+  noiseSource.connect(noiseBandPass);
+  noiseBandPass.connect(noiseGain);
+  noiseGain.connect(masterGain);
+
+  lfo.connect(lfoDepth);
+  lfoDepth.connect(bandPass.frequency);
+  flutter.connect(flutterDepth);
+  flutterDepth.connect(wetGain.gain);
+  ringMod.connect(ringDepth);
+  ringDepth.connect(masterGain.gain);
+
+  masterGain.connect(context.destination);
+
+  lfo.start();
+  flutter.start();
+  noiseSource.start();
+  ringMod.start();
+
+  return {
+    audioContext: context,
+    source,
+    masterGain,
+    dryGain,
+    wetGain,
+    highPass,
+    bandPass,
+    notchA,
+    notchB,
+    shelf,
+    lowPass,
+    shaper,
+    noiseSource,
+    noiseBandPass,
+    noiseGain,
+    lfo,
+    lfoDepth,
+    flutter,
+    flutterDepth,
+    ringMod,
+    ringDepth,
+  };
+}
+
+function teardownAudioFx(graph) {
+  if (!graph) return;
+  const stopNode = (node) => {
+    try {
+      node?.stop?.();
+    } catch {
+      // best effort
+    }
+  };
+
+  stopNode(graph.lfo);
+  stopNode(graph.flutter);
+  stopNode(graph.noiseSource);
+
+  disconnectNode(graph.source);
+  disconnectNode(graph.masterGain);
+  disconnectNode(graph.dryGain);
+  disconnectNode(graph.wetGain);
+  disconnectNode(graph.highPass);
+  disconnectNode(graph.bandPass);
+  disconnectNode(graph.notchA);
+  disconnectNode(graph.notchB);
+  disconnectNode(graph.shelf);
+  disconnectNode(graph.lowPass);
+  disconnectNode(graph.shaper);
+  disconnectNode(graph.noiseBandPass);
+  disconnectNode(graph.noiseGain);
+  disconnectNode(graph.lfoDepth);
+  disconnectNode(graph.flutterDepth);
+  disconnectNode(graph.ringMod);
+  disconnectNode(graph.ringDepth);
+
+  try {
+    graph.audioContext?.close?.();
+  } catch {
+    // best effort
+  }
+}
+
 export default function VoiceCard({
   title = "VOICE CARD",
   accent = "#9bff9b",
@@ -104,6 +287,7 @@ export default function VoiceCard({
       : [],
   );
   const audioRef = useRef(null);
+  const audioFxRef = useRef(null);
   const utteranceRef = useRef(null);
   const selectedProfileIdRef = useRef(null);
   const speakTokenRef = useRef(0);
@@ -177,10 +361,28 @@ export default function VoiceCard({
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = "";
+        audioRef.current = null;
+      }
+      teardownAudioFx(audioFxRef.current);
+      audioFxRef.current = null;
+    };
+  }, []);
+
   /** Remote TTS uses HTMLAudioElement — volume can change while playing. Browser SpeechSynthesis applies on next speak only. */
   useEffect(() => {
+    const graph = audioFxRef.current;
+    if (graph?.masterGain) {
+      graph.masterGain.gain.value = clamp01(volume / 100);
+    }
     const a = audioRef.current;
-    if (a) {
+    if (a && !graph) {
       a.volume = clamp01(volume / 100);
     }
   }, [volume]);
@@ -194,6 +396,9 @@ export default function VoiceCard({
       audio.src = "";
       audioRef.current = null;
     }
+
+    teardownAudioFx(audioFxRef.current);
+    audioFxRef.current = null;
 
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -302,9 +507,23 @@ export default function VoiceCard({
 
     if (token !== speakTokenRef.current) return;
 
-    const audio = new Audio(audioUrl);
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audio.src = audioUrl;
     audioRef.current = audio;
-    audio.volume = clamp01(volume / 100);
+    const outputGainValue = clamp01(volume / 100);
+    const useElectricFx = selectedProfile.effect === "codex";
+    if (useElectricFx && typeof window.AudioContext !== "undefined") {
+      try {
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        audioFxRef.current = createCodexElectricFx(context, audio, outputGainValue);
+      } catch (error) {
+        console.warn("VOICE_CODEX_FX_FALLBACK", error);
+        audio.volume = outputGainValue;
+      }
+    } else {
+      audio.volume = outputGainValue;
+    }
 
     audio.onplay = () => {
       if (token !== speakTokenRef.current) return;
@@ -325,6 +544,8 @@ export default function VoiceCard({
       setPaused(false);
       setStatus("idle");
       audioRef.current = null;
+      teardownAudioFx(audioFxRef.current);
+      audioFxRef.current = null;
     };
     audio.onerror = () => {
       if (token !== speakTokenRef.current) return;
@@ -332,6 +553,8 @@ export default function VoiceCard({
       setPaused(false);
       setStatus("error");
       audioRef.current = null;
+      teardownAudioFx(audioFxRef.current);
+      audioFxRef.current = null;
     };
 
     await audio.play();
@@ -370,29 +593,107 @@ export default function VoiceCard({
   const profileHint =
     selectedProfile.description ||
     (selectedProfile.effect ? `Effect: ${selectedProfile.effect}` : "");
+  const spokenText = text.trim() || DEFAULT_SAMPLE;
+  const screenTitle = speaking ? "SPEAKING" : "WORDS TO SAY";
 
   const shellStyle = {
     display: "flex",
     flexDirection: "column",
-    gap: compact ? 8 : 12,
-    padding: compact ? "8px" : "10px",
+    gap: compact ? 6 : 12,
+    padding: compact ? "6px" : "10px",
     border: `1px solid ${accent}33`,
     borderRadius: "16px",
     background: "linear-gradient(180deg, rgba(8,8,8,0.98), rgba(4,4,4,0.98))",
     boxShadow: `0 0 0 1px ${accent}12 inset`,
     height: "100%",
-    minHeight: compact ? "100%" : "auto",
-    overflow: "auto",
+    /** In grid tiles, `min-height: 100%` fights the parent flex budget and can paint overlapping siblings. */
+    minHeight: compact ? 0 : "auto",
+    overflow: compact ? "hidden" : "auto",
     ...style,
   };
 
+  const upstreamStatusInside =
+    compact && !showTextInput ? (
+      <div
+        style={{
+          marginTop: 2,
+          paddingTop: 6,
+          borderTop: `1px solid ${accent}18`,
+          color: "#8a8a8a",
+          fontSize: 10,
+          letterSpacing: "0.04em",
+        }}
+      >
+        Voice status: {status}
+        {speaking ? " (active)" : ""}
+      </div>
+    ) : null;
+
   return (
     <div style={shellStyle}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
         <div style={{ color: accent, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}>
           {title}
         </div>
         <div style={{ fontSize: 10, color: "#7a7a7a" }} />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gap: compact ? 6 : 8,
+          padding: compact ? "8px 10px" : "10px 12px",
+          borderRadius: 12,
+          border: `1px solid ${accent}22`,
+          background:
+            "linear-gradient(180deg, rgba(10, 14, 10, 0.96), rgba(5, 6, 5, 0.98))",
+          boxShadow: `0 0 0 1px ${accent}10 inset`,
+          flex: compact ? "1 1 0%" : undefined,
+          minWidth: 0,
+          minHeight: compact ? 0 : 96,
+          overflow: compact ? "auto" : undefined,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 10,
+            color: accent,
+            fontSize: 9,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+          }}
+        >
+          <span>{screenTitle}</span>
+          <span style={{ color: "#7a7a7a" }}>{speaking ? "live preview" : "queued line"}</span>
+        </div>
+        <div
+          style={{
+            minHeight: compact ? 22 : 40,
+            maxHeight: compact ? 52 : 92,
+            overflow: "auto",
+            color: "#d7ffd7",
+            fontFamily:
+              '"Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", "Courier New", ui-monospace, monospace',
+            fontSize: compact ? 11 : 13,
+            lineHeight: compact ? 1.35 : 1.45,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            textShadow: speaking ? "0 0 10px rgba(57, 255, 20, 0.18)" : "none",
+          }}
+        >
+          {spokenText}
+        </div>
       </div>
 
       {showTextInput ? (
@@ -404,14 +705,16 @@ export default function VoiceCard({
           style={{
             width: "100%",
             fontFamily: "monospace",
-            fontSize: 13,
-            padding: 8,
+            fontSize: compact ? 12 : 13,
+            padding: compact ? 6 : 8,
             borderRadius: 10,
-            border: "1px solid #222",
+            border: `1px solid ${accent}22`,
             resize: "vertical",
-            background: "#090909",
+            background: "rgba(9, 9, 9, 0.96)",
             color: "#d7ffd7",
-            minHeight: compact ? 44 : 72,
+            minHeight: compact ? 34 : 72,
+            boxShadow: `0 0 0 1px ${accent}08 inset`,
+            flexShrink: 0,
           }}
         />
       ) : (
@@ -420,29 +723,44 @@ export default function VoiceCard({
             width: "100%",
             minHeight: compact ? 44 : 72,
             borderRadius: 10,
-            border: "1px solid #222",
-            background: "#090909",
+            border: `1px solid ${accent}22`,
+            background: "rgba(9, 9, 9, 0.96)",
             color: "#7a7a7a",
             fontFamily: "monospace",
-            fontSize: 11,
-            padding: 10,
-            lineHeight: 1.4,
+            fontSize: compact ? 10 : 11,
+            padding: compact ? "8px 10px" : 10,
+            lineHeight: 1.35,
+            boxShadow: `0 0 0 1px ${accent}08 inset`,
+            flexShrink: 0,
           }}
         >
           Speak text is sourced upstream. The player only performs it.
+          {upstreamStatusInside}
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11, color: "#ccc" }}>
-          <div style={{ flex: "1 1 100%", color: "#8a8a8a", fontSize: 11 }}>
-            Voice status: {status} {speaking ? "(active)" : ""}
+      {!(compact && !showTextInput) ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: compact ? 10 : 11, color: "#ccc" }}>
+            <div style={{ flex: "1 1 100%", color: "#8a8a8a", fontSize: compact ? 10 : 11 }}>
+              Voice status: {status} {speaking ? "(active)" : ""}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {compact ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            alignItems: "center",
+            flexShrink: 0,
+            paddingBottom: 14,
+            marginTop: "auto",
+          }}
+        >
           <div
             style={{ touchAction: "none" }}
             onPointerDown={(e) => e.stopPropagation()}
@@ -456,8 +774,8 @@ export default function VoiceCard({
               step={1}
               value={volume}
               onValueChange={setVolume}
-              wheelMultiplier={3.6}
-              dragMultiplier={4.4}
+              wheelMultiplier={1.5}
+              dragMultiplier={2}
               size="sm"
               theme="dark"
               showReadout
@@ -479,7 +797,7 @@ export default function VoiceCard({
             ariaLabelOff="Codex voice off, press to start"
             style={{
               alignSelf: "center",
-              marginTop: 10,
+              marginTop: 4,
             }}
           />
         </div>
