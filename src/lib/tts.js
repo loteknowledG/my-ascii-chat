@@ -1,6 +1,22 @@
 const DEFAULT_TTS_BASE_URL = "https://aivoice.coderobo.org";
 const DEFAULT_CORS_ANYWHERE_PROXY = "https://cors-anywhere-dqgj.onrender.com/";
 
+/** In `vite dev`, use same-origin `/api/tts` (see `vite.config.ts` proxy) so profile voices work without a third-party CORS proxy. */
+function defaultBrowserTtsBaseUrl() {
+  if (import.meta.env?.DEV) return "";
+  return import.meta.env?.VITE_TTS_BASE_URL?.trim?.() || DEFAULT_TTS_BASE_URL;
+}
+
+function isSameOriginFetchUrl(url) {
+  if (typeof window === "undefined") return false;
+  if (url.startsWith("/")) return true;
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function getNodeRequire() {
   if (typeof window !== "undefined" && typeof window.require === "function") {
     return window.require;
@@ -71,11 +87,12 @@ function postJsonWithNodeHttps(url, payload) {
 }
 
 async function postJsonWithFetch(url, payload) {
-  const response = await fetch(`${DEFAULT_CORS_ANYWHERE_PROXY}${url}`, {
+  const fetchUrl = isSameOriginFetchUrl(url) ? url : `${DEFAULT_CORS_ANYWHERE_PROXY}${url}`;
+  const response = await fetch(fetchUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
+      ...(isSameOriginFetchUrl(url) ? {} : { "X-Requested-With": "XMLHttpRequest" }),
     },
     body: JSON.stringify(payload),
   });
@@ -113,7 +130,7 @@ export async function requestRemoteTtsAudioUrl({
   voice,
   rate = 0,
   pitch = 0,
-  baseUrl = DEFAULT_TTS_BASE_URL,
+  baseUrl = defaultBrowserTtsBaseUrl(),
 }) {
   const cleanedText = String(text || "").trim();
   if (!cleanedText) {
@@ -125,7 +142,9 @@ export async function requestRemoteTtsAudioUrl({
     throw new Error("Voice is required");
   }
 
-  const response = await postJson(`${baseUrl.replace(/\/+$/, "")}/api/tts`, {
+  const normalizedBase = String(baseUrl || "").replace(/\/+$/, "");
+  const postPath = normalizedBase ? `${normalizedBase}/api/tts` : "/api/tts";
+  const response = await postJson(postPath, {
     text: cleanedText,
     voice: cleanedVoice,
     rate,
@@ -137,5 +156,8 @@ export async function requestRemoteTtsAudioUrl({
     throw new Error("TTS response did not include an audio URL");
   }
 
-  return new URL(audioPath, `${baseUrl.replace(/\/+$/, "")}/`).toString();
+  const resolveBase =
+    normalizedBase ||
+    (typeof window !== "undefined" ? window.location.origin : DEFAULT_TTS_BASE_URL);
+  return new URL(audioPath, `${resolveBase.replace(/\/+$/, "")}/`).toString();
 }

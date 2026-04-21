@@ -653,6 +653,18 @@ function MechanicusCursorStage({ gridW, gridH }) {
               <div style={{ color: "#f7e6b0", fontFamily: "monospace", fontSize: 14 }}>
                 {cursorVoiceResolved?.label || "Tech Priest"}
               </div>
+              <div
+                style={{
+                  color: "#9dc4ff",
+                  fontFamily: '"Cascadia Mono", ui-monospace, monospace',
+                  fontSize: 8,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  wordBreak: "break-word",
+                }}
+              >
+                {`hook profile: ${effectiveProfile || "unknown"} · level ${hookVolume}% · ${hookOn ? "on" : "muted"} · bridge ${bridge ? "connected" : "offline"}`}
+              </div>
               <div style={{ color: "#a8a8a8", fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 8, lineHeight: 1.45 }}>
                 {String(cursorVoiceResolved?.description || "").trim() || "This AI uses one locked voice profile."}
               </div>

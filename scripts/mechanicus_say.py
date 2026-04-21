@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Speak arbitrary text with Samus mechanicus-voice (same pipeline as the Cursor hook).
+"""Speak arbitrary text with local/Samus mechanicus-voice helper.
 
 Usage:
   pnpm run mechanicus:say -- Your line here.
@@ -8,13 +8,27 @@ Usage:
 
 Cursor hook (after each agent reply): controlled by .cursor/hooks.json — present = on.
 Mute hook only (keep hooks.json): set env CURSOR_HOOK_MECHANICUS_LAST_SENTENCE=0 for Cursor.
-Samus root: SAMUS_MANUS_ROOT (default C:\\dev\\samus-manus).
+Resolution order (for full FX like mechanicus/warp-spider):
+  1) Samus helper: %SAMUS_MANUS_ROOT%/tools/voice_profile.py (default C:\\dev\\samus-manus)
+  2) Local helper: <repo>/tools/voice_profile.py
 """
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+
+def resolve_voice_helper() -> tuple[str, str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    samus_root = os.environ.get("SAMUS_MANUS_ROOT", r"C:\dev\samus-manus").strip()
+    samus_helper = Path(samus_root) / "tools" / "voice_profile.py"
+    if samus_helper.is_file():
+        return samus_root, str(samus_helper)
+
+    local_helper = repo_root / "tools" / "voice_profile.py"
+    return str(repo_root), str(local_helper)
 
 
 def main() -> int:
@@ -22,8 +36,7 @@ def main() -> int:
     if not text:
         text = "Flesh is weak. Steel and code endure."
 
-    root = os.environ.get("SAMUS_MANUS_ROOT", r"C:\dev\samus-manus").strip()
-    vp = os.path.join(root, "tools", "voice_profile.py")
+    root, vp = resolve_voice_helper()
     if not os.path.isfile(vp):
         print(f"[mechanicus_say] missing {vp}", file=sys.stderr)
         return 1

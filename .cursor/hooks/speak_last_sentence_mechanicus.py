@@ -14,7 +14,9 @@ Debug stdin: set CURSOR_HOOK_MECHANICUS_DEBUG=1 for Cursor, then retry once.
 Disable: CURSOR_HOOK_MECHANICUS_LAST_SENTENCE=0
 Cyberdeck (pnpm dev): write `.cursor/hooks/mechanicus-cursor.muted` containing `1` to mute; delete file or `0` to unmute (UI uses dev bridge GET/POST /__cyberdeck/mechanicus-cursor).
 Legacy win32 spawn (full detach; can break default audio on some PCs): CURSOR_HOOK_MECHANICUS_DETACHED=1
-Samus path: SAMUS_MANUS_ROOT (default C:\\dev\\samus-manus)
+Voice helper resolution:
+  1) local helper at <repo>/tools/voice_profile.py
+  2) %SAMUS_MANUS_ROOT%/tools/voice_profile.py (default C:\\dev\\samus-manus)
 
 Test without Cursor (type exactly this; do not add anything after the script name):
   pnpm run hook:test-mechanicus-last
@@ -48,6 +50,18 @@ _VOL_NO_OVERRIDE_MIN = 99  # UI at or above: no --volume
 _VOL_TRIM_PCT_MIN = -40
 _VOL_TRIM_PCT_MAX = 0
 _VOL_UI_TO_TRIM_SCALE = 0.5
+
+
+def _resolve_voice_profile_helper() -> tuple[str, str]:
+    """Return (cwd_root, voice_profile.py path), preferring Samus for full FX chains."""
+    repo_root = _HOOK_DIR.parents[1]
+    samus_root = os.environ.get("SAMUS_MANUS_ROOT", r"C:\dev\samus-manus").strip()
+    samus_helper = Path(samus_root) / "tools" / "voice_profile.py"
+    if samus_helper.is_file():
+        return samus_root, str(samus_helper)
+
+    local = repo_root / "tools" / "voice_profile.py"
+    return str(repo_root), str(local)
 
 
 def _read_cursor_tts_volume_override() -> str | None:
@@ -157,10 +171,23 @@ def _parse_json_object(raw: str) -> dict | None:
 
 def _extract_full_text(data: dict) -> str:
     """Collect assistant text from Cursor / variant hook payloads."""
-    for key in ("text", "response", "message", "assistantMessage", "assistant_message", "output"):
+    # Prefer assistant-specific keys before generic "text".
+    for key in ("assistantMessage", "assistant_message", "output", "response", "message", "text"):
         v = data.get(key)
         if isinstance(v, str) and v.strip():
             return v.strip()
+    messages = data.get("messages")
+    if isinstance(messages, list):
+        for item in reversed(messages):
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "")).lower()
+            if role not in ("assistant", "model", "ai"):
+                continue
+            for key in ("content", "text", "message"):
+                val = item.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
     msg = data.get("message")
     if isinstance(msg, dict):
         inner = _extract_full_text(msg)
@@ -187,6 +214,10 @@ def last_sentence(text: str) -> str:
     t = _strip_markdownish(text).strip()
     if not t:
         return ""
+    # Prefer the last non-empty line first (helps when payload includes sections).
+    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    if lines:
+        t = lines[-1]
     parts = re.split(r"(?<=[.!?])\s+", t)
     parts = [p.strip() for p in parts if p.strip()]
     if not parts:
@@ -235,8 +266,7 @@ def dry_run() -> int:
     full = (data.get("text") or "").strip()
     snippet = last_sentence(full)
     print(f"[dry-run] last_sentence = {snippet!r}")
-    root = os.environ.get("SAMUS_MANUS_ROOT", r"C:\dev\samus-manus").strip()
-    vp = os.path.join(root, "tools", "voice_profile.py")
+    root, vp = _resolve_voice_profile_helper()
     print(f"[dry-run] voice_profile exists: {os.path.isfile(vp)} ({vp})")
     return 0
 
@@ -278,8 +308,7 @@ def main() -> int:
     voice_profile = _read_cursor_hook_voice_profile()
     _log(f"main: snippet={snippet[:120]!r} voice={voice_profile}")
 
-    root = os.environ.get("SAMUS_MANUS_ROOT", r"C:\dev\samus-manus").strip()
-    vp = os.path.join(root, "tools", "voice_profile.py")
+    root, vp = _resolve_voice_profile_helper()
     if not os.path.isfile(vp):
         _log(f"missing voice_profile: {vp}")
         print(f"[mechanicus-hook] missing voice_profile: {vp}", file=sys.stderr)
@@ -317,7 +346,8 @@ def main() -> int:
         popen_kw["stderr"] = tts_log
         vol = _read_cursor_tts_volume_override()
         cmd = [sys.executable, vp, "speak", voice_profile]
-        # One argv token so values like "-20%" are not parsed as unknown flags.
+        # Use `--volume=-25%` (one token). A separate `-25%` argv is parsed as another flag
+        # because it starts with '-', which makes voice_profile.py exit before any audio.
         if vol:
             cmd.append(f"--volume={vol}")
         cmd.append(snippet)

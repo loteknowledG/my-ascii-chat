@@ -5,7 +5,8 @@
   "description": "",
   "main": "main.cjs",
   "scripts": {
-    "voice:warp-spider": "powershell -NoProfile -Command \"$env:CODEX_LOCAL_VOICE='Microsoft Zira Desktop - English (United States)'; $env:CODEX_EFFECT_PRESET='warp-clean'; node c:/dev/samus-manus/codex-voice/index.js --provider local --mode full\"",
+    "voice:warp-spider": "python tools/voice_profile.py speak warp-spider \"Warp spider voice check.\"",
+    "voice:cursor:warp-spider": "powershell -NoProfile -Command \"Set-Content -Path .cursor/hooks/cursor-tts-voice.txt -Value 'warp-spider'; if (Test-Path .cursor/hooks/mechanicus-cursor.muted) { Set-Content -Path .cursor/hooks/mechanicus-cursor.muted -Value '0' }; Write-Host 'Cursor hook voice set to warp-spider'\"",
     "dev": "vite --host 127.0.0.1 --port 3000",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 3000",

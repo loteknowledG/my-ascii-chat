@@ -273,6 +273,8 @@ export default function VoiceCard({
   previewOnProfileChange = false,
   showTextInput = true,
   compact = false,
+  /** If neural TTS fails, auto-play Windows speech. Default false so demos stay quiet instead of embarrassing. */
+  allowAutomaticBrowserFallback = false,
   style = {},
 } = {}) {
   const [text, setText] = useState(sampleText);
@@ -280,6 +282,12 @@ export default function VoiceCard({
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [status, setStatus] = useState("idle");
+  /** Last successful speak path: `remote` = neural MP3; `browser` = Windows speech (robotic). */
+  const [voiceEngine, setVoiceEngine] = useState(null);
+  /** One-shot: user opted into Windows speech after a failed neural attempt. */
+  const [sessionBrowserFallback, setSessionBrowserFallback] = useState(false);
+  /** Human copy when neural TTS failed and we stayed silent on purpose. */
+  const [remoteFailureHint, setRemoteFailureHint] = useState(null);
   const [volume, setVolume] = useState(100);
   const [availableVoices, setAvailableVoices] = useState(() =>
     typeof window !== "undefined" && window.speechSynthesis
@@ -407,6 +415,7 @@ export default function VoiceCard({
     setSpeaking(false);
     setPaused(false);
     setStatus("idle");
+    setRemoteFailureHint(null);
   };
 
   const pause = () => {
@@ -445,7 +454,8 @@ export default function VoiceCard({
     }
   };
 
-  const playBrowserFallback = async () => {
+  const playBrowserFallback = async (opts = {}) => {
+    const { clearSessionOptInOnEnd = false } = opts;
     const token = speakTokenRef.current;
     if (!window.speechSynthesis) {
       throw new Error("Browser speech unavailable");
@@ -467,6 +477,7 @@ export default function VoiceCard({
     utter.volume = clamp01(volume / 100);
     utter.onstart = () => {
       if (token !== speakTokenRef.current) return;
+      setVoiceEngine("browser");
       setSpeaking(true);
       setPaused(false);
       setStatus("speaking");
@@ -486,12 +497,18 @@ export default function VoiceCard({
       setSpeaking(false);
       setPaused(false);
       setStatus("idle");
+      if (clearSessionOptInOnEnd) {
+        setSessionBrowserFallback(false);
+      }
     };
     utter.onerror = () => {
       if (token !== speakTokenRef.current) return;
       setSpeaking(false);
       setPaused(false);
       setStatus("error");
+      if (clearSessionOptInOnEnd) {
+        setSessionBrowserFallback(false);
+      }
     };
     synth.speak(utter);
   };
@@ -527,6 +544,7 @@ export default function VoiceCard({
 
     audio.onplay = () => {
       if (token !== speakTokenRef.current) return;
+      setVoiceEngine("remote");
       setSpeaking(true);
       setPaused(false);
       setStatus("speaking");
@@ -564,7 +582,11 @@ export default function VoiceCard({
     if (!text.trim()) return;
     stop();
     const token = speakTokenRef.current;
+    setRemoteFailureHint(null);
     setStatus("loading");
+
+    const mayUseRoboticFallback =
+      allowAutomaticBrowserFallback || sessionBrowserFallback;
 
     try {
       if (token !== speakTokenRef.current) return;
@@ -576,16 +598,28 @@ export default function VoiceCard({
     } catch (error) {
       console.error("VOICE_TTS_ERROR", error);
       if (token !== speakTokenRef.current) return;
-      setStatus("error");
       setSpeaking(false);
       setPaused(false);
-      if (!selectedProfile.forceNativeTTS) {
+      if (!selectedProfile.forceNativeTTS && mayUseRoboticFallback) {
+        setStatus("loading");
         try {
-          await playBrowserFallback();
+          await playBrowserFallback({
+            clearSessionOptInOnEnd: sessionBrowserFallback,
+          });
         } catch (fallbackError) {
           console.error("VOICE_FALLBACK_ERROR", fallbackError);
           setStatus("error");
+          setRemoteFailureHint(
+            "Neural and Windows speech both failed — still silent. Check the console.",
+          );
         }
+      } else if (!selectedProfile.forceNativeTTS) {
+        setStatus("error");
+        setRemoteFailureHint(
+          "Neural voice did not load — nothing was played on purpose so you do not get the robotic Windows voice in front of people. Run pnpm dev (local TTS proxy) or fix the network, then try again.",
+        );
+      } else {
+        setStatus("error");
       }
     }
   };
@@ -612,6 +646,52 @@ export default function VoiceCard({
     ...style,
   };
 
+  const windowsFallbackHint =
+    voiceEngine === "browser" ? (
+      <div
+        style={{
+          marginTop: 6,
+          color: "#c9a227",
+          fontSize: 9,
+          lineHeight: 1.4,
+          letterSpacing: "0.02em",
+        }}
+      >
+        Robotic ‘Stephen Hawking’-style tone = <strong>Windows speech fallback</strong>, not the profile neural voice.
+        For the real cast, run <span style={{ fontFamily: "monospace", color: "#d7ffd7" }}>pnpm dev</span> (local TTS
+        proxy) or check the browser console for <span style={{ fontFamily: "monospace" }}>VOICE_TTS_ERROR</span>.
+      </div>
+    ) : null;
+
+  const neuralFailurePanel = remoteFailureHint ? (
+    <div style={{ marginTop: 8, width: "100%" }}>
+      <div style={{ color: "#ffb38a", fontSize: 9, lineHeight: 1.45 }}>{remoteFailureHint}</div>
+      <button
+        type="button"
+        onClick={() => {
+          setSessionBrowserFallback(true);
+          setRemoteFailureHint(null);
+          void speak();
+        }}
+        style={{
+          marginTop: 8,
+          width: "100%",
+          cursor: "pointer",
+          borderRadius: 8,
+          border: `1px solid ${accent}44`,
+          background: "rgba(20, 12, 8, 0.95)",
+          color: "#c9a227",
+          fontFamily: "monospace",
+          fontSize: 9,
+          padding: "6px 8px",
+          textAlign: "center",
+        }}
+      >
+        Use Windows voice once (debug only)
+      </button>
+    </div>
+  ) : null;
+
   const upstreamStatusInside =
     compact && !showTextInput ? (
       <div
@@ -626,6 +706,8 @@ export default function VoiceCard({
       >
         Voice status: {status}
         {speaking ? " (active)" : ""}
+        {windowsFallbackHint}
+        {neuralFailurePanel}
       </div>
     ) : null;
 
@@ -745,6 +827,8 @@ export default function VoiceCard({
             <div style={{ flex: "1 1 100%", color: "#8a8a8a", fontSize: compact ? 10 : 11 }}>
               Voice status: {status} {speaking ? "(active)" : ""}
             </div>
+            {windowsFallbackHint}
+            {neuralFailurePanel}
           </div>
         </div>
       ) : null}

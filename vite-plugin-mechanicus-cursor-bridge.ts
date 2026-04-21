@@ -9,7 +9,7 @@ import {
   CURSOR_TTS_VOLUME_UI_DEFAULT,
 } from "./src/lib/cursorTtsVolume.ts";
 
-const DEFAULT_PROFILE = "mechanicus-voice";
+const DEFAULT_PROFILE = "warp-spider";
 
 /** Cursor after-reply TTS: mute flag + Samus voice profile (Cyberdeck UI in dev / preview). */
 export function mechanicusCursorBridge(rootDir: string): Plugin {
