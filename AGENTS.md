@@ -26,3 +26,18 @@ The canonical harness and memory rules live in the sibling repo:
 ## Intent
 
 This repo is the shell. The harness is where the context contract lives.
+
+## Pi Integration
+
+The cyberdeck embeds [pi](https://pi.dev/) as a terminal coding agent via its RPC mode. When server `p` (π) is selected:
+
+- pi launches as a subprocess with `pi --mode rpc --no-session`
+- The `PiTerminal` component (`src/components/PiTerminal.jsx`) manages stdin/stdout JSONL
+- Extension UI requests (select, confirm, input, editor) are handled with sensible defaults
+- pi has access to the cyberdeck's memory system via bash commands and can route through the uplink
+
+Pi brings:
+- Tree-structured session history with fork/clone
+- 15+ model providers (Anthropic, OpenAI, Google, Groq, Cerebras, etc.)
+- Skills and prompt templates loaded on-demand
+- Extensions architecture (sub-agents, plan mode, permission gates, MCP integration)

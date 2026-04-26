@@ -1,7 +1,6 @@
 import MemoryMomentCard from "./MemoryMomentCard";
 import AsciiStartStopButton from "./AsciiStartStopButton";
-import VoiceAdaptiveWheel from "./VoiceAdaptiveWheel";
-import { CURSOR_TTS_PROFILES, DEFAULT_VSCODE_TTS_PROFILE_ID } from "../lib/cursorTtsProfiles";
+import { DEFAULT_VSCODE_TTS_PROFILE_ID } from "../lib/cursorTtsProfiles";
 import { resolveVoiceProfile } from "../lib/voiceProfiles";
 
 import { useMemo, useState } from "react";
@@ -80,27 +79,53 @@ export default function VSCodeVoiceCard({
             gap: 8,
           }}
         >
-          <VoiceAdaptiveWheel
-            value={selectedProfile}
-            onValueChange={onProfileChange ?? (() => {})}
-            options={CURSOR_TTS_PROFILES.map((p) => ({ value: p.id, label: p.label }))}
-            bezelTitle="VS Code"
-            fullWidth
-            accent={accent}
-          />
           <div
             style={{
-              color: "#a8a8a8",
-              fontFamily: "ui-sans-serif, system-ui, sans-serif",
-              fontSize: 8,
-              lineHeight: 1.45,
-              wordBreak: "break-word",
-              textAlign: "left",
               width: "100%",
-              alignSelf: "stretch",
+              borderRadius: 14,
+              border: `1px solid ${accent}2a`,
+              background: "linear-gradient(180deg, rgba(10,12,16,0.96), rgba(4,5,8,0.98))",
+              boxShadow: `0 0 0 1px ${accent}12 inset`,
+              padding: "12px 14px 10px",
+              boxSizing: "border-box",
             }}
           >
-            {String(resolved?.description || "").trim() || "No short description for this profile."}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "baseline",
+                marginBottom: 8,
+              }}
+            >
+              <div
+                style={{
+                  color: accent,
+                  fontSize: 9,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {resolved?.label || "VS Code"}
+              </div>
+              <div style={{ color: "#7a7a7a", fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                Voice locked
+              </div>
+            </div>
+            <div
+              style={{
+                color: "#a8a8a8",
+                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                fontSize: 8,
+                lineHeight: 1.45,
+                wordBreak: "break-word",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              {String(resolved?.description || "").trim() || "This voice is fixed to VS Code."}
+            </div>
           </div>
           <div
             style={{

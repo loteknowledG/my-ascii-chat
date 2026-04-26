@@ -23,6 +23,6 @@ The harness and memory contract live in the sibling repo:
 - runtime routing is delegated to Cognosys
 - keeping the harness contract separate from the app shell
 - voice playback uses remote TTS when reachable, then falls back to browser speech synthesis
-- the voice tuner is a separate profile lab with a preview screen, base-profile chips, and locale/tuning controls
 - voice rail maps Cursor to Warp Spider, VS Code to Tech Priest with the extra echo layer, and Codex to a dedicated Datasmith Scribe profile with binary chatter and metallic shimmer
 - Cursor now shows a Realmorph Shim knob to the left of the start/stop control; pressing the dial face toggles the active state while drag and wheel still tune volume
+- Server `p` (π) embeds [pi](https://pi.dev/) coding agent via RPC mode with full stdin/stdout JSONL streaming, extension UI protocol support, and tree-structured session history

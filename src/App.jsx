@@ -14,6 +14,7 @@ import JustifiedMasonry from "./components/JustifiedMasonry";
 import TerminalColumn from "./components/TerminalColumn";
 import MemoryFullscreenOverlay from "./components/MemoryFullscreenOverlay";
 import VoiceFlowPanel from "./components/VoiceFlowPanel";
+import PiTerminal from "./components/PiTerminal";
 import { DEFAULT_CURSOR_TTS_PROFILE_ID } from "./lib/cursorTtsProfiles";
 
 const APP_STATE_KEY = "wyc_app_state_v1";
@@ -52,6 +53,7 @@ export default function App() {
         logs: [],
         providers: [],
         "samus-manus": [],
+        "pi-terminal": [],
       },
   );
   const [modelList, setModelList] = useState([]);
@@ -250,11 +252,13 @@ export default function App() {
     m: "OPERATOR",
     s: "MAINNET-UPLINK",
     b: "SAMUS-MANUS",
+    p: "PI-AGENT",
   };
   const defaultChannelByServer = {
     m: "agenda",
     s: "providers",
     b: "samus-manus",
+    p: "pi-terminal",
   };
   const secondColumnSelectionLabel =
     server === "m"
@@ -266,14 +270,16 @@ export default function App() {
         : "Voices";
   const providerTint = !providerReady
     ? inactiveTextColor
-    : currentModelHealth === "green"
+    : providerModelFetchStatus === "ready"
       ? "#00ff00"
-      : currentModelHealth === "testing" || currentModelHealth === "amber"
-        ? "#ffaa00"
-        : inactiveTextColor;
+      : currentModelHealth === "green"
+        ? "#00ff00"
+        : currentModelHealth === "testing" || currentModelHealth === "amber"
+          ? "#ffaa00"
+          : inactiveTextColor;
   const providerTintGlow = !providerReady
     ? inactiveTextGlow
-    : currentModelHealth === "green"
+    : providerModelFetchStatus === "ready" || currentModelHealth === "green"
       ? activeTextGlow
       : currentModelHealth === "testing" || currentModelHealth === "amber"
         ? amberTextGlow
@@ -1667,7 +1673,7 @@ export default function App() {
       </div>
     ) : null
   );
-  const speakCards =
+const speakCards =
     server === "b" ? (
       <div
         style={{
@@ -1680,6 +1686,18 @@ export default function App() {
         }}
       >
         <VoiceFlowPanel compact />
+      </div>
+    ) : null;
+  const piTerminalPanel =
+    server === "p" ? (
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <PiTerminal />
       </div>
     ) : null;
   const fullscreenOverlayVisible = !!memoryFullscreenCard && Boolean(activeMomentDockKey);
@@ -1701,6 +1719,7 @@ export default function App() {
             { id: "m", glyph: "Ø" },
             { id: "s", glyph: "μ" },
             { id: "b", glyph: "§" },
+            { id: "p", glyph: "π" },
           ].map((button) => (
             <div
               key={button.id}
@@ -2049,7 +2068,7 @@ export default function App() {
                   )}
                 </div>
               </>
-            ) : (
+            ) : server === "b" ? (
               <>
                 <div
                   onClick={() => {
@@ -2086,7 +2105,72 @@ export default function App() {
                   {chan === "samus-manus" ? "> " : "# "}Voices
                 </div>
               </>
-            )}
+            ) : server === "p" ? (
+              <>
+                <div
+                  onClick={() => {
+                    handleRowClick("chan-pi-terminal", false, () => {
+                      setChan("pi-terminal");
+                      playSystemSound("click");
+                      if (isDrawerMode) setDrawerProgress(0);
+                    });
+                  }}
+                  className={
+                    pressedRowId === "chan-pi-terminal"
+                      ? "nav-row pressed"
+                      : "nav-row"
+                  }
+                  style={{
+                    cursor: "pointer",
+                    "--nav-color":
+                      chan === "pi-terminal" ? "#00ff00" : inactiveTextColor,
+                    "--nav-shadow":
+                      chan === "pi-terminal" ? activeTextGlow : inactiveTextGlow,
+                    "--nav-hover-color":
+                      chan === "pi-terminal" ? "#36ff73" : "#b0b0b0",
+                    "--nav-hover-shadow":
+                      chan === "pi-terminal"
+                        ? "0 0 10px rgba(54, 255, 115, 0.30)"
+                        : inactiveTextGlow,
+                    paddingTop: "8px",
+                    paddingBottom: "8px",
+                  }}
+                >
+                  {chan === "pi-terminal" ? "> " : "# "}PI_SESSION
+                </div>
+                <div
+                  onClick={() => {
+                    handleRowClick("chan-pi-commands", false, () => {
+                      setChan("pi-commands");
+                      playSystemSound("click");
+                      if (isDrawerMode) setDrawerProgress(0);
+                    });
+                  }}
+                  className={
+                    pressedRowId === "chan-pi-commands"
+                      ? "nav-row pressed"
+                      : "nav-row"
+                  }
+                  style={{
+                    cursor: "pointer",
+                    "--nav-color":
+                      chan === "pi-commands" ? "#00ff00" : inactiveTextColor,
+                    "--nav-shadow":
+                      chan === "pi-commands" ? activeTextGlow : inactiveTextGlow,
+                    "--nav-hover-color":
+                      chan === "pi-commands" ? "#36ff73" : "#b0b0b0",
+                    "--nav-hover-shadow":
+                      chan === "pi-commands"
+                        ? "0 0 10px rgba(54, 255, 115, 0.30)"
+                        : inactiveTextGlow,
+                    paddingTop: "8px",
+                    paddingBottom: "8px",
+                  }}
+                >
+                  {chan === "pi-commands" ? "> " : "# "}PI_COMMANDS
+                </div>
+              </>
+            ) : null}
           </div>
         </aside>
 
@@ -2105,8 +2189,8 @@ export default function App() {
               setDrawerProgress(0);
             }
           }}
-          memoryPanels={memoryPanels}
-          topPanel={speakCards}
+          memoryPanels={server === "p" ? null : memoryPanels}
+          topPanel={server === "p" ? piTerminalPanel : speakCards}
           messages={channelData[chan] || []}
           messageLogRef={messageLogRef}
           chatEndRef={chatEndRef}
@@ -2116,11 +2200,13 @@ export default function App() {
             setInput(e.target.value);
             playSystemSound("click", 0.04);
           }}
-          onInputKeyDown={handleSend}
+          onInputKeyDown={server === "p" ? undefined : handleSend}
           inputPlaceholder={
             chan === "providers"
               ? "ENTER GATEWAY KEY..."
-              : "Enter command or message..."
+              : server === "p"
+                ? "PI handles its own input..."
+                : "Enter command or message..."
           }
         />
       </div>

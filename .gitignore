@@ -143,6 +143,9 @@ dist
 # Windows: accidental reserved-name file if something redirected to `nul` from repo root
 /nul
 
+# Semantic atlas (local DB; refresh: in samus-manus run `npm run atlas:ingest:weyland`)
+.atlas/
+
 # Cyberdeck → Cursor mechanicus mute flag (local)
 .cursor/hooks/mechanicus-cursor.muted
 .cursor/hooks/cursor-tts-voice.txt
