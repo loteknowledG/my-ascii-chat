@@ -14,6 +14,7 @@ export default function TerminalColumn({
   onInputChange,
   onInputKeyDown,
   inputPlaceholder,
+  isAiThinking = false,
 }) {
   const renderMessageText = (text) => {
     if (
@@ -124,6 +125,11 @@ export default function TerminalColumn({
           ))}
 
           <div ref={chatEndRef} />
+          {isAiThinking && (
+            <div style={{ color: "#00ff00", fontSize: "12px", marginTop: "8px" }}>
+              <span className="cursor-blink">█</span> COGITATING...
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { cloneElement, useState, useEffect, useRef } from "react";
+import { Effect } from "effect";
 import {
   setupAudio,
   playSystemSound,
@@ -9,7 +10,7 @@ import {
   playResponseEnd,
 } from "./AudioEngine";
 import { transmit } from "./Uplink";
-import { fetchWeb, fetchUrl } from "./lib/webFetch";
+import { fetchWeb } from "./lib/webFetch";
 import { runBashCommand } from "./lib/bashTool";
 import { art, BOOT_LOGO } from "./TerminalArt";
 import { Memory } from "./lib/memory";
@@ -66,6 +67,15 @@ function saveChannelData(data) {
 }
 
 export default function App() {
+  useEffect(() => {
+    const orig = console.warn;
+    console.warn = (...args) => {
+      if (args[0] && typeof args[0] === "string" && args[0].includes("Cross origin")) return;
+      orig.apply(console, args);
+    };
+    return () => { console.warn = orig; };
+  }, []);
+
   const persistedState = loadAppState();
   const booted = true;
   const [server, setServer] = useState(() => persistedState.server || "m");
@@ -75,6 +85,7 @@ export default function App() {
   const [input, setInput] = useState(() => persistedState.input || "");
   const [channelData, setChannelData] = useState(loadChannelData);
   const [modelList, setModelList] = useState([]);
+  const [isAiThinking, setIsAiThinking] = useState(false);
 
   // OPENCODE ADDED TO PROVIDERS
   const providers = ["opencode", "openrouter", "openai"];
@@ -814,17 +825,42 @@ export default function App() {
     }
 
     const aiId = Date.now();
+    setIsAiThinking(true);
     setChannelData((prev) => ({
       ...prev,
       [chan]: [...prev[chan], { role: "AI", text: "", id: aiId }],
     }));
     playThinking();
 
-    let systemPrompt = "You are MU/TH/UR 6000. Concise, technical. You have web access and bash tools.";
+    let systemPrompt = `You are MU/TH/UR 6000. Weyland-Yutani mainframe interface.
+
+IMPORTANT: Web fetch and bash commands are executed by the system BEFORE you respond. You receive results in the following formats:
+- TOOL_RESULT: [actual results from web/bash already executed]
+- webContext: [URLs and data already retrieved]
+
+Your job is to PRESENT the already-fetched results clearly. Do NOT simulate tool calls, do NOT write "[TOOL_CALL]", do NOT describe what you "would" fetch. The tools already ran. Just deliver the data.
+
+If no results appear, say "NET ACCESS UNAVAILABLE" and proceed without web data.`;
     if (chan === "intel")
-      systemPrompt = "Science Officer interface. objective data analysis. You have web access and bash tools.";
+      systemPrompt = `Science Officer interface. objective data analysis.
+
+IMPORTANT: Web fetch and bash commands are executed by the system BEFORE you respond. You receive results in the following formats:
+- TOOL_RESULT: [actual results from web/bash already executed]
+- webContext: [URLs and data already retrieved]
+
+Your job is to PRESENT the already-fetched results clearly. Do NOT simulate tool calls, do NOT write "[TOOL_CALL]", do NOT describe what you "would" fetch. The tools already ran. Just deliver the data.
+
+If no results appear, say "NET ACCESS UNAVAILABLE" and proceed without web data.`;
     if (chan === "logs")
-      systemPrompt = "Mission Recorder. Chronological log format. You have web access and bash tools.";
+      systemPrompt = `Mission Recorder. Chronological log format.
+
+IMPORTANT: Web fetch and bash commands are executed by the system BEFORE you respond. You receive results in the following formats:
+- TOOL_RESULT: [actual results from web/bash already executed]
+- webContext: [URLs and data already retrieved]
+
+Your job is to PRESENT the already-fetched results clearly. Do NOT simulate tool calls, do NOT write "[TOOL_CALL]", do NOT describe what you "would" fetch. The tools already ran. Just deliver the data.
+
+If no results appear, say "NET ACCESS UNAVAILABLE" and proceed without web data.`;
 
     let memoryContext = "";
     let memoryContextRows = [];
@@ -862,14 +898,19 @@ export default function App() {
     const isSearchQuery = /^(search|browse|look up|find|google|web|net|internet|http|www\.)/i.test(val.trim());
     let webContext = "";
     let bashContext = "";
+    let toolResult = null;
 
     const isBashCommand = /^(bash|sh|shell|\$|ls|cat|grep|find|echo|rm|mkdir|cd|pwd|touch|cp|mv|curl|wget|npm|node|python|git)\s/i.test(val.trim()) ||
       /[;&|`$]/.test(val.trim());
 
+    const isCapabilityQuestion = /can you|do you have|what can you|can i|abilities|capabilities|skills|tools/i.test(val);
+    const isInternetQuestion = /internet|web|online|browse|fetch|get.*data|lookup|search\s|intel|information\s+about|research/i.test(val);
+    const isCommandQuestion = /run.*command|execute|bash|shell|terminal|cmd|console/i.test(val);
+
     let bashResult = null;
-    if (isBashCommand) {
+    if (isBashCommand || isCommandQuestion) {
       bashContext = "[BASH_TOOL: MU/TH/UR will execute bash command and return output]";
-      const cmdResult = await runBashCommand(val);
+      const cmdResult = await Effect.runPromise(runBashCommand(val));
       if (cmdResult.success) {
         bashResult = `[BASH_OUTPUT]\nstdout:\n${cmdResult.stdout}${cmdResult.stderr ? `\nstderr:\n${cmdResult.stderr}` : ""}`;
       } else {
@@ -877,7 +918,42 @@ export default function App() {
       }
     }
 
-    if (isSearchQuery) {
+    let webFailed = false;
+    let lastWebFailTime = 0;
+
+    if (isCapabilityQuestion && !bashResult) {
+      const [testResult, webResult] = await Promise.all([
+        Effect.runPromise(runBashCommand("echo 'bash working'")),
+        Effect.runPromise(fetchWeb("test", 1).pipe(Effect.catchAll(() => Effect.succeed({ success: false, error: "failed" })))),
+      ]);
+      toolResult = `[CAPABILITY_CHECK]\nBash: ${testResult.success ? "WORKING" : "FAILED"}\nWeb fetch: ${webResult.success ? "WORKING" : "FAILED"}\n\nMU/TH/UR capabilities confirmed active.`;
+    } else if (isInternetQuestion && !isSearchQuery && !webFailed) {
+      if (Date.now() - lastWebFailTime < 30000) {
+        toolResult = "[WEB_RESULTS] Rate limited. AI answering from training data.";
+      } else {
+        setChannelData((prev) => ({
+          ...prev,
+          [chan]: [
+            ...prev[chan],
+            { role: "SYS", text: "ACCESSING_NET..." },
+          ],
+        }));
+
+        const query = val.replace(/^(retrieve|get|find|fetch|search|lookup)\s+(intel|data|info|information|details?|facts?)\s+(on|about|regarding|re)?\s*/i, "").replace(/[^a-zA-Z0-9\s]/g, " ").trim();
+        const webResult = await Effect.runPromise(fetchWeb(query || val.replace(/[^a-zA-Z0-9\s]/g, " ").trim(), 3).pipe(Effect.catchAll((e) => {
+          if (String(e).includes("RATE_LIMITED") || String(e).includes("429")) {
+            webFailed = true;
+            lastWebFailTime = Date.now();
+          }
+          return Effect.succeed({ success: false, error: String(e) });
+        })));
+        if (webResult.success && webResult.urls?.length > 0) {
+          toolResult = `[WEB_RESULTS]\n${webResult.urls.map((u, i) => `${i + 1}. ${u}`).join("\n")}`;
+        } else {
+          toolResult = "[WEB_RESULTS] Fetch failed. AI answering from training data.";
+        }
+      }
+    } else if (isSearchQuery && !webFailed) {
       setChannelData((prev) => ({
         ...prev,
         [chan]: [
@@ -888,19 +964,25 @@ export default function App() {
 
       try {
         const query = val.replace(/^(search|browse|look up|find|google|web|net|internet)\s+/i, "").trim();
-        const webResult = await fetchWeb(query, 5);
+        const webResult = await Effect.runPromise(fetchWeb(query, 5).pipe(Effect.catchAll((e) => {
+          if (String(e).includes("RATE_LIMITED") || String(e).includes("429")) {
+            webFailed = true;
+            lastWebFailTime = Date.now();
+          }
+          return Effect.succeed({ success: false, error: String(e) });
+        })));
 
-        if (webResult.success && webResult.urls.length > 0) {
+        if (webResult.success && webResult.urls?.length > 0) {
           webContext = [
             "\nWEB_RESULTS:",
             ...webResult.urls.map((url, i) => `${i + 1}. ${url}`),
             "\nYou have web access. Fetch a URL if needed to get details.",
           ].join("\n");
         } else {
-          webContext = "\nWEB_RESULTS: No results found or fetch failed.";
+          webContext = null;
         }
       } catch (err) {
-        webContext = `\nWEB_ERROR: ${String(err)}`;
+        webContext = null;
       }
     }
 
@@ -916,6 +998,13 @@ export default function App() {
       promptMessages.push({
         role: "system",
         content: `BASH_RESULT:\n${bashResult}`,
+      });
+    }
+
+    if (toolResult) {
+      promptMessages.push({
+        role: "system",
+        content: `TOOL_RESULT:\n${toolResult}`,
       });
     }
 
@@ -936,56 +1025,54 @@ export default function App() {
         stream: true,
       });
 
-      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      if (res.status === 429) {
+        setChannelData((prev) => ({
+          ...prev,
+          [chan]: [
+            ...prev[chan],
+            { role: "SYS", text: "PROVIDER RATE LIMITED. Retrying shortly..." },
+          ],
+        }));
+      }
 
+      if (!res.ok) {
+        let errMsg = `HTTP_${res.status}`;
+        try {
+          const errBody = await res.json();
+          errMsg = errBody.error?.message || errBody.error || JSON.stringify(errBody).slice(0, 200);
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      if (!res.body) {
+        throw new Error("Response body is null - streaming not supported");
+      }
+
+      console.log("STREAM_START");
+      let fullContent = "";
+      let pending = "";
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let fullContent = "";
-      let streamBuffer = "";
-      let firstChunk = true;
+      let totalRead = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        streamBuffer += decoder.decode(value, { stream: true });
-        const lines = streamBuffer.split("\n");
-        streamBuffer = lines.pop();
+        totalRead += value.length;
+        pending += decoder.decode(value, { stream: true });
+        const lines = pending.split("\n");
+        pending = lines.pop() || "";
         for (const line of lines) {
-          const cleaned = line.replace(/^data: /, "").trim();
-          if (!cleaned || cleaned === "[DONE]") continue;
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "[DONE]") continue;
+          let data = trimmed;
+          if (data.startsWith("data:")) data = data.slice(5).trim();
+          if (!data) continue;
           try {
-            // ... inside your while(true) loop
-            const parsed = JSON.parse(cleaned);
-            const content = parsed.choices[0]?.delta?.content || "";
-
-            if (content) {
-              if (firstChunk) {
-                playResponseStart();
-                firstChunk = false;
-              }
-              fullContent += content;
-
-              // --- SAFETY SHIELD START ---
-              // 1. Emergency Truncate: If AI goes over 5000 chars, force a stop
-              if (fullContent.length > 5000) {
-                fullContent =
-                  fullContent.substring(0, 5000) +
-                  "\n\n[SYSTEM: BUFFER_OVERFLOW_DETECTION]";
-                reader.cancel(); // Physically stops the stream from the server
-              }
-
-              // 2. Repetition Filter: Detects if the same character repeats 50+ times (like the smileys)
-              const repetitivePattern = /(.)\1{50,}/g;
-              if (repetitivePattern.test(fullContent)) {
-                fullContent = fullContent.replace(
-                  repetitivePattern,
-                  "$1... [REPETITIVE_SIGNAL_FILTERED]",
-                );
-                reader.cancel(); // Stops the AI from wasting more tokens
-              }
-              // --- SAFETY SHIELD END ---
-
-              playSystemSound("click", 0.05);
+            const parsed = JSON.parse(data);
+            const text = parsed.choices?.[0]?.delta?.content || "";
+            if (text) {
+              fullContent += text;
               setChannelData((prev) => ({
                 ...prev,
                 [chan]: prev[chan].map((m) =>
@@ -995,6 +1082,19 @@ export default function App() {
             }
           } catch (e) {}
         }
+        setIsAiThinking(false);
+      }
+      setIsAiThinking(false);
+      console.log("STREAM_DONE", totalRead, "bytes");
+
+      if (!fullContent.trim() && toolResult) {
+        fullContent = toolResult;
+        setChannelData((prev) => ({
+          ...prev,
+          [chan]: prev[chan].map((m) =>
+            m.id === aiId ? { ...m, text: fullContent } : m,
+          ),
+        }));
       }
 
       if (fullContent.trim()) {
@@ -1019,7 +1119,19 @@ export default function App() {
           ],
         }));
       }
+
+      if (toolResult) {
+        setChannelData((prev) => ({
+          ...prev,
+          [chan]: [
+            ...prev[chan],
+            { role: "SYS", text: toolResult },
+          ],
+        }));
+      }
+      setIsAiThinking(false);
     } catch (err) {
+      setIsAiThinking(false);
       setChannelData((prev) => ({
         ...prev,
         [chan]: [
@@ -1028,6 +1140,14 @@ export default function App() {
         ],
       }));
     }
+  };
+
+  const handleClearSession = () => {
+    setChannelData((prev) => ({
+      ...prev,
+      [chan]: [{ role: "SYS", text: "SESSION CLEARED." }],
+    }));
+    playSystemSound("click");
   };
 
   const handleLegacyImport = async () => {
@@ -1882,42 +2002,58 @@ const speakCards =
                 : serverLabelById[server] || "MAINNET-UPLINK"}
             </div>
             {server === "m" ? (
-              ["agenda", "intel", "logs"].map((c) => (
+              <>
+                {["agenda", "intel", "logs"].map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => {
+                      const isSelected = chan === c;
+                      handleRowClick("chan-" + c, isSelected, () => {
+                        if (isDrawerMode && isSelected) {
+                          setDrawerProgress(0);
+                          return;
+                        }
+                        setChan(c);
+                        playSystemSound("click");
+                        if (isDrawerMode) setDrawerProgress(0);
+                      });
+                    }}
+                    className={
+                      pressedRowId === "chan-" + c ? "nav-row pressed" : "nav-row"
+                    }
+                    style={{
+                      cursor: "pointer",
+                      "--nav-color": chan === c ? "#00ff00" : inactiveTextColor,
+                      "--nav-shadow":
+                        chan === c ? activeTextGlow : inactiveTextGlow,
+                      "--nav-hover-color": chan === c ? "#36ff73" : "#b0b0b0",
+                      "--nav-hover-shadow":
+                        chan === c
+                          ? "0 0 10px rgba(54, 255, 115, 0.30)"
+                          : inactiveTextGlow,
+                      paddingTop: "8px",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    {chan === c ? "> " : "# "}
+                    {c.toUpperCase()}
+                  </div>
+                ))}
                 <div
-                  key={c}
-                  onClick={() => {
-                    const isSelected = chan === c;
-                    handleRowClick("chan-" + c, isSelected, () => {
-                      if (isDrawerMode && isSelected) {
-                        setDrawerProgress(0);
-                        return;
-                      }
-                      setChan(c);
-                      playSystemSound("click");
-                      if (isDrawerMode) setDrawerProgress(0);
-                    });
-                  }}
-                  className={
-                    pressedRowId === "chan-" + c ? "nav-row pressed" : "nav-row"
-                  }
+                  onClick={handleClearSession}
+                  className="nav-row"
                   style={{
                     cursor: "pointer",
-                    "--nav-color": chan === c ? "#00ff00" : inactiveTextColor,
-                    "--nav-shadow":
-                      chan === c ? activeTextGlow : inactiveTextGlow,
-                    "--nav-hover-color": chan === c ? "#36ff73" : "#b0b0b0",
-                    "--nav-hover-shadow":
-                      chan === c
-                        ? "0 0 10px rgba(54, 255, 115, 0.30)"
-                        : inactiveTextGlow,
+                    "--nav-color": "#ff6600",
+                    "--nav-shadow": "0 0 8px rgba(255, 102, 0, 0.4)",
+                    "--nav-hover-color": "#ff8533",
                     paddingTop: "8px",
                     paddingBottom: "8px",
                   }}
                 >
-                  {chan === c ? "> " : "# "}
-                  {c.toUpperCase()}
+                  # CLEAR_SESSION
                 </div>
-              ))
+              </>
             ) : server === "s" ? (
               <>
                 <div
@@ -2280,12 +2416,13 @@ const speakCards =
           }}
           memoryPanels={server === "p" ? null : memoryPanels}
           topPanel={server === "p" ? piTerminalPanel : speakCards}
+          isAiThinking={isAiThinking}
           messages={channelData[chan] || []}
           messageLogRef={messageLogRef}
           chatEndRef={chatEndRef}
-          inputRef={inputRef}
-          inputValue={input}
-          onInputChange={(e) => {
+          inputRef={server === "p" ? null : inputRef}
+          inputValue={server === "p" ? "" : input}
+          onInputChange={server === "p" ? () => {} : (e) => {
             setInput(e.target.value);
             playSystemSound("keypress");
           }}

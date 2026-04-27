@@ -6,6 +6,7 @@
   "main": "main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3000",
+    "dev:tui": "node tui/index.js",
     "dev:electron": "electron main.cjs",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:electron\"",
     "build": "vite build",
